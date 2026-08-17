@@ -1,6 +1,6 @@
 # Project Intelligence Local
 
-Localhost-only Windows app. This is a **separate** project from the cloud dashboard.
+Localhost-only Windows app (Alpha). This is a **separate** project from the cloud dashboard.
 
 - Runs on `127.0.0.1` only
 - Stores data in local SQLite
@@ -8,6 +8,20 @@ Localhost-only Windows app. This is a **separate** project from the cloud dashbo
 - Optional AI via a local model (LM Studio / Ollama) in Settings
 
 The cloud product stays in `centralized-project-intelligence-dashboard`.
+
+GitHub: https://github.com/eXtreameGamer2/project-intelligence-desktop
+
+## Install (what people should run)
+
+Download the latest **Setup** from [GitHub Releases](https://github.com/eXtreameGamer2/project-intelligence-desktop/releases). Current build:
+
+https://github.com/eXtreameGamer2/project-intelligence-desktop/releases/tag/v1.0.24
+
+Use **`Project-Intelligence-Local-Setup-1.0.24.exe`**. Do not install from git. The Setup file is larger than GitHub’s 100MB git limit, so it is not in the repo.
+
+The installer is unsigned. Windows may say the app cannot run or to check with the publisher. Right-click the `.exe` → Properties → **Unblock** if that checkbox is there, or use SmartScreen **More info** → **Run anyway** for this file you built.
+
+This build is x64 Windows only.
 
 ## Run in a window (closest to an .exe)
 
@@ -24,19 +38,24 @@ npm run desktop
 npm run dist
 ```
 
-The installer lands in `release/`. First build downloads Electron and can take several minutes.
+The installer lands in `release/` as `Project Intelligence Local Setup <version>.exe`. First build downloads Electron and can take several minutes. That folder is gitignored on purpose.
 
 ## Updates
 
-Installed copies check GitHub Releases for `eXtreameGamer2/project-intelligence-desktop`. Users can also click **Check for updates** in Settings. A packaged install can download the next Setup .exe and restart to apply it; a development window opens the download instead.
+Installed copies check GitHub Releases for `eXtreameGamer2/project-intelligence-desktop`. Users can also click **Check for updates** in Settings. A packaged install can download the next Setup `.exe` and restart to apply it; a development window opens the download instead.
+
+Check for updates uses `latest.yml` and **`Project-Intelligence-Local-Setup-<version>.exe`** on the release (hyphens, not spaces).
 
 To publish a new version:
 
 1. Bump `version` in `package.json` and `CURRENT_APP_VERSION` in `frontend/src/lib/patchNotes.js`.
-2. Build with `npm run dist`, or publish with `npm run release` if `GH_TOKEN` can create GitHub releases.
-3. Attach `Project Intelligence Local Setup <version>.exe` and `latest.yml` from `release/` to a GitHub release tagged `v<version>`.
+2. Build with `npm run dist`.
+3. Copy the Setup file to `Project-Intelligence-Local-Setup-<version>.exe` so the name matches `latest.yml`.
+4. Create a GitHub release tagged `v<version>` and attach that hyphenated Setup `.exe` plus `latest.yml` from `release/`.
 
-Until a release exists, Check for updates reports that no published release was found yet.
+`npm run release` can publish in one step if `GH_TOKEN` can create GitHub releases. Do not commit the Setup `.exe` to git.
+
+Older installs (1.0.23 and below) do not include the updater. Those users install 1.0.24 from the release page once.
 
 ## Browser fallback
 
