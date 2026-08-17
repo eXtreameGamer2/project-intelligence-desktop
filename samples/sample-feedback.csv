@@ -1,0 +1,9 @@
+source,severity,feedback
+mobile-app,high,Login session expires after 30 seconds on iOS 18
+web-dashboard,medium,CSV export button does nothing on Firefox 128
+api,high,Project list returns 500 when a user has more than 50 projects
+mobile-app,low,Dark mode toggle does not persist after app restart
+web-dashboard,high,Uploading a 12MB spreadsheet shows a blank error toast
+onboarding,medium,New users cannot find the sample project after first login
+api,medium,Roadmap share links remain active after sharing is turned off
+web-dashboard,low,Settings page does not show which AI provider is currently saved

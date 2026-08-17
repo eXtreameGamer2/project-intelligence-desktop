@@ -1,0 +1,220 @@
+// Dual-database Prisma schema.
+// Provider is resolved at runtime via src/db/client.js:
+//   - DATABASE_URL set  → PostgreSQL (Supabase cloud SaaS)
+//   - DATABASE_URL unset → SQLite (local free tier)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  supabaseId String?   @unique
+  tier       String    @default("free") // "free" | "paid"
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  projects   Project[]
+  overviewFeed OverviewFeedMessage[]
+  calendarProposals CalendarProposal[]
+  aiTrainingExamples AiTrainingExample[]
+  aiModelProfiles    AiModelProfile[]
+}
+
+model Project {
+  id              String           @id @default(cuid())
+  name            String
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shareToken      String?          @unique
+  isPublicRoadmap Boolean          @default(false)
+  uploadedReports      UploadedReport[]
+  actionItems          AIActionItem[]
+  savedSuggestions     SavedSuggestion[]
+  suggestionAnalyses   SuggestionAnalysis[]
+  calendarEntries      CalendarEntry[]
+  calendarProposals    CalendarProposal[]
+  aiTrainingExamples   AiTrainingExample[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([userId])
+}
+
+model OverviewFeedMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model CalendarEntry {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      String
+  title     String
+  notes     String?
+  startAt   DateTime
+  endAt     DateTime?
+  allDay    Boolean  @default(false)
+  status    String   @default("scheduled")
+  source    String   @default("user")
+  itemId    String?
+  item      AIActionItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, startAt])
+  @@index([itemId])
+}
+
+model CalendarProposal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entryId     String?
+  itemId      String?
+  source      String
+  action      String
+  payloadJson String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([projectId])
+}
+
+model UploadedReport {
+  id          String         @id @default(cuid())
+  projectId   String
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fileName    String
+  nickname    String?
+  fileType    String
+  fileSize    Int
+  rawContent  String
+  parsedAt    DateTime       @default(now())
+  actionItems AIActionItem[]
+  createdAt   DateTime       @default(now())
+
+  @@index([projectId])
+}
+
+model AIActionItem {
+  id               String               @id @default(cuid())
+  projectId        String
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reportId         String?
+  report           UploadedReport?      @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  title            String
+  description      String?
+  priority         Int                  @default(0)
+  completed        Boolean              @default(false)
+  suggestionsJson      String?
+  discussion           ActionItemMessage[]
+  savedSuggestions     SavedSuggestion[]
+  suggestionAnalyses   SuggestionAnalysis[]
+  calendarEntries      CalendarEntry[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([projectId])
+  @@index([reportId])
+}
+
+model ActionItemMessage {
+  id        String       @id @default(cuid())
+  itemId    String
+  item      AIActionItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime     @default(now())
+
+  @@index([itemId])
+}
+
+model SavedSuggestion {
+  id        String       @id @default(cuid())
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      AIActionItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  title     String
+  detail    String?
+  completed Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  @@unique([itemId, title])
+  @@index([projectId])
+  @@index([itemId])
+}
+
+model SuggestionAnalysis {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  itemId       String?
+  item         AIActionItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileType     String
+  fileSize     Int
+  rawContent   String
+  analysis     String
+  snapshotJson String
+  createdAt    DateTime      @default(now())
+
+  @@index([projectId])
+  @@index([itemId])
+}
+
+model AiTrainingExample {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind         String   @default("report-parse")
+  inputExcerpt String
+  outputJson   String
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, kind])
+  @@index([projectId])
+}
+
+model AiModelProfile {
+  id             String   @id @default(cuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String   @default("localhost")
+  modelId        String
+  modelKey       String
+  modelBase      String
+  family         String   @default("unknown")
+  nCtx           Int      @default(8192)
+  maxTokens      Int      @default(1024)
+  jsonOk         Int      @default(0)
+  jsonFail       Int      @default(0)
+  dumpCount      Int      @default(0)
+  lastErrorClass String?
+  nCtxSource     String   @default("preload")
+  source         String   @default("preload")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, modelKey])
+  @@index([modelKey])
+}

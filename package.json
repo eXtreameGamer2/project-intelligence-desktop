@@ -1,0 +1,47 @@
+{
+  "name": "project-intelligence-desktop",
+  "version": "1.0.24",
+  "author": "Project Intelligence",
+  "description": "Project Intelligence Local — localhost desktop workspace",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eXtreameGamer2/project-intelligence-desktop.git"
+  },
+  "scripts": {
+    "setup": "npm install && npm --prefix frontend install && npm run db:generate && npm run db:push && npm run db:seed && npm run build",
+    "dev": "cross-env CPID_DESKTOP=1 HOST=127.0.0.1 PORT=4310 SERVE_STATIC=false node src/index.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "cross-env CPID_DESKTOP=1 NODE_ENV=production SERVE_STATIC=true HOST=127.0.0.1 PORT=4310 node src/index.js",
+    "desktop": "cross-env CPID_DESKTOP=1 electron .",
+    "dist": "npm run build && electron-builder --win nsis",
+    "release": "npm run build && electron-builder --win nsis --publish always",
+    "db:generate": "node scripts/set-db-env.js generate",
+    "db:push": "node scripts/set-db-env.js db push",
+    "db:seed": "node scripts/set-db-env.js db seed",
+    "demo:upload": "node scripts/demo-upload.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.1",
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.9",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.9.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
+    "prisma": "^6.3.1"
+  }
+}

@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-slate-800/80 bg-surface-900/80 shadow-panel;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-surface-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-slate-600 hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-slate-700 bg-surface-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20;
+  }
+
+  .chat-markdown {
+    @apply space-y-2 text-sm leading-6;
+  }
+
+  .chat-markdown p {
+    @apply m-0;
+  }
+
+  .chat-markdown strong {
+    @apply font-semibold text-white;
+  }
+
+  .chat-markdown em {
+    @apply italic text-slate-200;
+  }
+
+  .chat-markdown code {
+    @apply rounded bg-surface-950 px-1.5 py-0.5 font-mono text-[12px] text-sky-300;
+  }
+
+  .chat-markdown h1,
+  .chat-markdown h2,
+  .chat-markdown h3 {
+    @apply m-0 font-semibold text-white;
+  }
+
+  .chat-markdown h1 {
+    @apply text-base;
+  }
+
+  .chat-markdown h2,
+  .chat-markdown h3 {
+    @apply text-sm;
+  }
+
+  .chat-markdown ul,
+  .chat-markdown ol {
+    @apply m-0 list-outside space-y-1 pl-5;
+  }
+
+  .chat-markdown ul {
+    @apply list-disc;
+  }
+
+  .chat-markdown ol {
+    @apply list-decimal;
+  }
+}
+
+@keyframes discuss-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.discuss-window {
+  animation: discuss-pop 180ms ease-out;
+}
+
+@keyframes save-attention {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(251 191 36 / 0);
+  }
+  35% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 10px rgb(251 191 36 / 0.32);
+  }
+}
+
+.save-attention {
+  animation: save-attention 0.55s ease-in-out 3;
+}
+
+@keyframes unsaved-flash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.unsaved-flash {
+  animation: unsaved-flash 0.55s ease-in-out 3;
+}
+
+.ai-progress-fill {
+  transition: width 700ms linear;
+  background-image: linear-gradient(
+    90deg,
+    rgb(37 99 235) 0%,
+    rgb(96 165 250) 50%,
+    rgb(37 99 235) 100%
+  );
+  background-size: 200% 100%;
+  animation: ai-progress-sheen 1.1s linear infinite;
+}
+
+@keyframes ai-progress-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

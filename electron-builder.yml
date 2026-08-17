@@ -1,0 +1,38 @@
+appId: com.projectintelligence.desktop
+productName: Project Intelligence Local
+asar: false
+files:
+  - electron/**
+  - src/**
+  - frontend/dist/**
+  - prisma/schema.prisma
+  - prisma/seed.js
+  - package.json
+  - '!prisma/*.db'
+  - '!prisma/*.db-journal'
+  - '!**/.env'
+  - '!release/**'
+  - '!uploads/**'
+  - from: node_modules/.prisma
+    to: node_modules/.prisma
+publish:
+  provider: github
+  owner: eXtreameGamer2
+  repo: project-intelligence-desktop
+  releaseType: release
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName} Setup ${version}.${ext}
+  differentialPackage: false
+extraResources:
+  - from: prisma/desktop.db
+    to: prisma/desktop.template.db
+  - from: node_modules/.prisma/client
+    to: prisma-client
+directories:
+  output: release
