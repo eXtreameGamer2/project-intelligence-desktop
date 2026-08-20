@@ -1,8 +1,19 @@
 const LAST_SEEN_KEY = 'cpid-last-seen-version';
 
-export const CURRENT_APP_VERSION = '1.0.24';
+export const CURRENT_APP_VERSION = '1.0.25';
 
 export const PATCH_NOTES = [
+  {
+    version: '1.0.25',
+    date: '2026-08-19',
+    title: 'Large imports and multi-pass data files',
+    changes: [
+      'Large files are read in sequential windows when they exceed the model context.',
+      'CSV, Excel, ODS, JSON, and HTML imports require multi-pass with 4 to 8 passes in Settings.',
+      'Word, PDF, PowerPoint, and text still import on a normal one-pass run.',
+      'Reasoning stays off during imports and other non-chat jobs.',
+    ],
+  },
   {
     version: '1.0.24',
     date: '2026-08-16',
