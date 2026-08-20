@@ -11,6 +11,7 @@ import {
   discussActionItem,
   discussOverviewFeed,
   effectiveMultiPassCount,
+  allowsStructuredImport,
   fetchDashboard,
   fetchOverviewFeed,
   fetchProject,
@@ -62,6 +63,7 @@ import { clearProgressClock, estimateFileJobMs, IMPORT_PROGRESS_CLOCK_ID } from 
 import { estimateTrainedFileJobMs, hasTrainedJobSamples, recordLocalJobTiming } from '../lib/jobTiming';
 import { reportDisplayName, reportRefreshState } from '../lib/projectInsights';
 import { loadImportFocus, saveImportFocus, importFocusReady } from '../lib/importFocus';
+import { isStructuredImportName } from '../lib/uploadTypes';
 import {
   CURRENT_APP_VERSION,
   markVersionSeen,
@@ -130,6 +132,7 @@ export default function DashboardApp() {
     remainingAt: null,
     startedAt: null,
     trained: false,
+    notice: '',
   };
   const [aiProgress, setAiProgress] = useState(idleProgress);
   const [importProgress, setImportProgress] = useState(idleProgress);
@@ -517,14 +520,16 @@ export default function DashboardApp() {
         event?.remainingMs == null
           ? prev.remainingMs ?? estimateFileJobMs(0)
           : Number(event.remainingMs);
+      const nextPercent = event?.percent == null ? prev.percent || 0 : Number(event.percent) || 0;
       return {
         active: true,
         step: event?.step || prev.step || 'Working',
-        percent: event?.percent == null ? prev.percent || 0 : Number(event.percent) || 0,
+        percent: Math.max(prev.percent || 0, nextPercent),
         remainingMs,
         remainingAt: prev.remainingAt || now,
         startedAt: prev.startedAt || now,
         trained: Boolean(event?.trained) || Boolean(prev.trained),
+        notice: event?.notice == null ? prev.notice || '' : String(event.notice),
       };
     });
   };
@@ -622,6 +627,12 @@ export default function DashboardApp() {
       projects.find((item) => item.id === projectId)?.name ||
       'Project';
     if (!user || !projectId || isUploading || expandingReportId || !importFocusReady(importFocus)) return;
+    if (isStructuredImportName(file.name) && !allowsStructuredImport(aiSettings)) {
+      setError(
+        'CSV, Excel, ODS, JSON, and HTML need multi-pass import with 4 to 8 passes. Turn that on in Settings, or upload Word, PDF, PowerPoint, or text instead.'
+      );
+      return;
+    }
 
     const controller = new AbortController();
     importAbortRef.current = controller;
@@ -1304,6 +1315,13 @@ export default function DashboardApp() {
     }
   };
 
+  const handleReasoningChange = (enabled) => {
+    const next = { ...aiSettings, reasoningEnabled: Boolean(enabled) };
+    setAiSettings(next);
+    setDraftSettings((current) => ({ ...current, reasoningEnabled: Boolean(enabled) }));
+    saveAiSettings(next, user?.id).catch(() => {});
+  };
+
   const handleSaveSettings = async () => {
     try {
       const saved = await saveAiSettings(draftSettings, user?.id);
@@ -1572,6 +1590,9 @@ export default function DashboardApp() {
               proposalError={proposalError}
               onCreateProject={handleCreateProject}
               isCreating={isCreatingProject}
+              reasoningEnabled={aiSettings.reasoningEnabled !== false}
+              onReasoningChange={handleReasoningChange}
+              showReasoning
             />
           )}
           <div
@@ -1648,6 +1669,9 @@ export default function DashboardApp() {
               hasProjects={projects.length > 0}
               onCreateProject={handleCreateProject}
               isCreating={isCreatingProject}
+              reasoningEnabled={aiSettings.reasoningEnabled !== false}
+              onReasoningChange={handleReasoningChange}
+              showReasoning
             />
           </div>
         </div>

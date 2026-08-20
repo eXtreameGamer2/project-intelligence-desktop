@@ -77,7 +77,7 @@ function extractBalancedObject(text) {
 
 function looksLikeArrayStart(source, index) {
   const slice = source.slice(index, index + 48);
-  return /^\[\s*(?:\{|"|\[|\d|t|f|n)/i.test(slice);
+  return /^\[\s*(?:\{|"|\[|(?:null|true|false)\b|-?\d)/i.test(slice);
 }
 
 function extractArrayCandidates(text) {
@@ -364,6 +364,19 @@ const APPROACH_STOP_TOKENS = new Set([
   'will',
 ]);
 
+function isExampleApproachItem(item) {
+  const title = String(item?.title ?? item?.task ?? item?.name ?? item ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return EXAMPLE_APPROACH_TITLES.has(title);
+}
+
+function isExampleOnlyArray(array) {
+  if (!Array.isArray(array) || !array.length) return false;
+  return array.every((item) => isExampleApproachItem(item));
+}
+
 function tokenizeApproach(text) {
   return (String(text || '').toLowerCase().match(/[a-z0-9]{5,}/g) || []).filter(
     (token) => !APPROACH_STOP_TOKENS.has(token)
@@ -493,13 +506,82 @@ function normalizeActionItem(item, index) {
   return null;
 }
 
+function isWorkField(key) {
+  const name = String(key || '').toLowerCase().trim();
+  if (!name) return false;
+  if (/^(assigned|status|priority|severity|platform|start|due|complete|completed|resource|column_\d+)$/i.test(name)) {
+    return false;
+  }
+  if (/date$/.test(name)) return false;
+  return /task|title|name|summary|bug|issue|desc|detail|feature|repro|request|feedback|suggest|note|comment|steps|expected|actual|problem/.test(
+    name
+  );
+}
+
+function recordWorkTexts(reportContent) {
+  const rows = [];
+  for (const line of String(reportContent || '').split('\n')) {
+    if (!/^RECORD \d+/i.test(line)) continue;
+    const values = [];
+    for (const part of line.split(' | ')) {
+      const piece = part.trim();
+      const splitAt = piece.indexOf(': ');
+      if (splitAt < 0) continue;
+      if (!isWorkField(piece.slice(0, splitAt).trim())) continue;
+      values.push(piece.slice(splitAt + 2).toLowerCase());
+    }
+    const text = values.join(' ').replace(/\s+/g, ' ').trim();
+    if (text) rows.push(text);
+  }
+  return rows;
+}
+
 function itemMentionsReport(item, reportContent) {
-  const hay = String(reportContent || '').toLowerCase();
-  if (hay.length < 80) return true;
-  const tokens = tokenizeApproach(`${item.title || ''} ${item.description || ''}`);
+  const rows = recordWorkTexts(reportContent);
+  const title = String(item?.title || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!title) return false;
+  if (!rows.length) {
+    const labelText = (pattern) =>
+      String(reportContent || '')
+        .split('\n')
+        .filter((line) => pattern.test(line))
+        .map((line) => line.replace(/^[A-Z ]+:\s*/i, '').toLowerCase().replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+    const headings = labelText(/^(HEADING|SUBHEADING):/i);
+    const blocks = labelText(/^(PARAGRAPH|LIST ITEM):/i);
+    const isCaption = (block) => {
+      if (!block || block.length > 72) return false;
+      if (/^(page|slide)\s+\d+$/i.test(block)) return true;
+      const words = block.split(/\s+/).filter(Boolean);
+      return words.length <= 8 && /\b(list|table|overview|index|contents)$/i.test(block);
+    };
+    const workBlocks = blocks.filter((block) => !isCaption(block));
+    const headingOnly =
+      headings.some((heading) => {
+        if (!heading || heading.length < 6) return false;
+        if (heading === title) return true;
+        if (title.length >= 8 && heading.includes(title)) return true;
+        return heading.length >= 10 && title.includes(heading);
+      }) && !workBlocks.some((block) => block.includes(title));
+    if (headingOnly) return false;
+    if (blocks.length) {
+      return title.length >= 4 && workBlocks.some((block) => block.includes(title));
+    }
+    const fallback = String(reportContent || '').toLowerCase();
+    if (fallback.length < 80) return true;
+    return fallback.includes(title) || tokenizeApproach(title).filter((token) => fallback.includes(token)).length >= 2;
+  }
+  if (title.length >= 6 && rows.some((row) => row.includes(title))) return true;
+  const tokens = tokenizeApproach(`${title} ${item.description || ''}`);
   if (!tokens.length) return false;
-  const hits = tokens.filter((token) => hay.includes(token));
-  return hits.some((token) => token.length >= 8) || hits.length >= 2;
+  const needed = Math.max(1, Math.ceil(Math.min(tokens.length, 5) * 0.6));
+  return rows.some((row) => {
+    const hits = tokens.filter((token) => row.includes(token));
+    return hits.length >= needed;
+  });
 }
 
 function filterApproaches(items, reportContent) {
@@ -544,19 +626,61 @@ function scoreApproachArray(rawItems, reportContent) {
   return score;
 }
 
+function sliceFromJsonish(raw) {
+  const source = String(raw || '');
+  const matches = [...source.matchAll(/"(?:title|task|name|summary|approach)"\s*:/g)];
+  if (!matches.length) return '';
+  const titleAt = matches[matches.length - 1].index;
+  const fromArr = source.lastIndexOf('[', titleAt);
+  const fromObj = source.lastIndexOf('{', titleAt);
+  const start = Math.max(fromArr, fromObj);
+  return start >= 0 ? source.slice(start) : '';
+}
+
+function extractArrayNearTitle(raw) {
+  const source = String(raw || '');
+  const matches = [...source.matchAll(/"(?:title|task|name|summary|approach)"\s*:/g)];
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const titleAt = matches[index].index;
+    for (let start = source.lastIndexOf('[', titleAt); start >= 0; start = source.lastIndexOf('[', start - 1)) {
+      if (!looksLikeArrayStart(source, start)) continue;
+      const parsed = parseJsonCandidate(extractBalancedFrom(source, start, '[', ']'));
+      const array = unwrapTaskArray(parsed);
+      if (array?.length && !isExampleOnlyArray(array)) return array;
+    }
+    const objStart = source.lastIndexOf('{', titleAt);
+    if (objStart >= 0) {
+      const parsed = parseJsonCandidate(extractBalancedFrom(source, objStart, '{', '}'));
+      const array = unwrapTaskArray(parsed);
+      if (array?.length && !isExampleOnlyArray(array)) return array;
+    }
+  }
+  return null;
+}
+
 function collectTaskArrays(raw) {
   const arrays = [];
   const seen = new Set();
   const push = (value) => {
     const array = unwrapTaskArray(value);
-    if (!Array.isArray(array) || !array.length) return;
+    if (!Array.isArray(array) || !array.length || isExampleOnlyArray(array)) return;
     const key = JSON.stringify(array).slice(0, 800);
     if (seen.has(key)) return;
     seen.add(key);
     arrays.push(array);
   };
 
-  const sources = [stripModelFiller(raw)];
+  const sources = [
+    sliceFromJsonish(stripModelFiller(raw)),
+    sliceFromJsonish(raw),
+    stripModelFiller(raw),
+    String(raw || '').trim(),
+    ...thinkBlocks(raw).map((block) =>
+      String(block)
+        .replace(/^<(?:think|thinking|reasoning|reflection|thought)\b[^>]*>/i, ' ')
+        .replace(/<\/(?:think|thinking|reasoning|reflection|thought)>$/i, ' ')
+    ),
+  ];
   for (const source of sources) {
     if (!source) continue;
     const candidates = [];
@@ -597,6 +721,10 @@ export function extractActionItems(rawResponse, options = {}) {
     );
 
   let parsed = ranked[0]?.items || null;
+  const nearTitle = extractArrayNearTitle(rawResponse) || [];
+  if (!parsed?.length) {
+    parsed = filterApproaches(nearTitle, reportContent);
+  }
   if (!parsed?.length && !reportContent) {
     parsed = filterApproaches(extractTaskList(stripModelFiller(rawResponse)) || [], reportContent);
   }

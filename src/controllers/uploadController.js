@@ -1,5 +1,5 @@
 import { prisma } from '../db/client.js';
-import { analyzeReportContent, expandReportApproaches, refineReportContent } from '../services/aiService.js';
+import { analyzeReportWithOverflow, expandReportApproaches, refineReportContent } from '../services/aiService.js';
 import { extractFileContent } from '../utils/fileParser.js';
 import { resolveRequestUser } from '../middleware/auth.js';
 import { assertProjectOwnership, assertReportRetentionLimit } from '../middleware/tierGate.js';
@@ -10,6 +10,7 @@ import {
 import { removeCalendarForApproaches } from '../utils/calendar.js';
 import { createProgressWriter } from '../utils/aiProgress.js';
 import {
+  allowsStructuredImport,
   isLocalTrainingEnabled,
   isMultiPassImportEnabled,
   loadJobTimingEstimate,
@@ -109,7 +110,7 @@ async function runImportAnalysis({
       const examples = await loadExamples();
       const onPassProgress = () => progress.stage(`Pass ${pass} of ${passCount}`, percent);
       if (pass === 1) {
-        const result = await analyzeReportContent(req, latestContent, onPassProgress, examples);
+        const result = await analyzeReportWithOverflow(req, latestContent, onPassProgress, examples);
         actionItems = result.actionItems;
         firstPassItems = result.actionItems;
         analysis = result;
@@ -127,7 +128,7 @@ async function runImportAnalysis({
     }
   } else {
     const examples = await loadExamples();
-    analysis = await analyzeReportContent(req, latestContent, progress.stage, examples);
+    analysis = await analyzeReportWithOverflow(req, latestContent, progress.stage, examples);
   }
 
   return { analysis, firstPassItems, content: latestContent };
@@ -275,7 +276,10 @@ export async function uploadReport(req, res) {
       const file = savedPath
         ? await loadSavedUpload(savedPath, req.file.originalname)
         : req.file;
-      return extractFileContent(file);
+      return extractFileContent(file, {
+        allowStructured: allowsStructuredImport(req),
+        includeOpenStructured: false,
+      });
     };
 
     progress.stage('Reading', 10);
@@ -318,7 +322,7 @@ export async function uploadReport(req, res) {
         analysis = ran.analysis;
         content = ran.content;
       } catch (error) {
-        if (!/did not include any action items/i.test(String(error.message || ''))) {
+        if (!/did not include any action items|did not return any approaches/i.test(String(error.message || ''))) {
           throw error;
         }
       }
@@ -330,7 +334,7 @@ export async function uploadReport(req, res) {
 
       let considered = [...existingItems, ...accepted];
       let remaining = remainingPrioritySlots(considered, { countCompleted: true });
-      if (totalRemainingSlots(remaining) > 0) {
+      if (useMultiPass && totalRemainingSlots(remaining) > 0) {
         progress.stage('Expanding', 82);
         const extra = await expandReportApproaches(
           req,

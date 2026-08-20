@@ -2,6 +2,9 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+const MAX_JOB_MS = 20 * 60 * 1000;
+const IMPORT_WINDOW_MS = 56000;
+
 export function estimateInputChars(payload) {
   try {
     return JSON.stringify(payload || '').length;
@@ -17,15 +20,26 @@ export function expectedOutputChars(inputChars = 0) {
 export function estimateJobMs(inputChars = 0, expectedMs = null) {
   const trained = Number(expectedMs);
   if (Number.isFinite(trained) && trained > 0) {
-    return clamp(trained, 3000, 180000);
+    return clamp(trained, 3000, MAX_JOB_MS);
   }
   const writeMs = (expectedOutputChars(inputChars) / 36) * 1000;
-  return clamp(4500 + writeMs + 2000, 14000, 180000);
+  return clamp(4500 + writeMs + 2000, 14000, MAX_JOB_MS);
 }
 
-export function estimateFileJobMs(byteLength = 0) {
-  const kb = Math.max(0, Number(byteLength) || 0) / 1024;
-  return clamp(16000 + kb * 220, 18000, 180000);
+export function estimateImportWindowCount(byteLength = 0) {
+  const bytes = Math.max(0, Number(byteLength) || 0);
+  if (bytes < 24000) return 1;
+  return clamp(Math.ceil(bytes / 40000), 2, 8);
+}
+
+export function estimateFileJobMs(byteLength = 0, passCount = 1, windowCount = 0) {
+  const passes = Math.max(1, Number(passCount) || 1);
+  const windows = Math.max(1, Number(windowCount) || estimateImportWindowCount(byteLength));
+  if (windows <= 1) {
+    const kb = Math.max(0, Number(byteLength) || 0) / 1024;
+    return clamp((16000 + kb * 220) * passes, 18000 * passes, MAX_JOB_MS);
+  }
+  return clamp(IMPORT_WINDOW_MS * windows * passes, 20000, MAX_JOB_MS);
 }
 
 export function percentFromTiming(elapsedMs, remainingMs) {

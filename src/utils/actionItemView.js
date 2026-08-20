@@ -36,6 +36,50 @@ export function serializeSavedSuggestion(entry) {
   };
 }
 
+export function formatApproachScreenBriefing(item) {
+  const suggestions = parseSuggestions(item?.suggestionsJson);
+  const saved = withSaveSteps((item?.savedSuggestions || []).map(serializeSavedSuggestion)).filter(
+    (entry) => !entry.completed
+  );
+  const analyses = item?.suggestionAnalyses || [];
+  const suggestionLines = suggestions.length
+    ? suggestions.map((row, index) => {
+        const n = row.procedureIndex || index + 1;
+        const label = row.kind === 'step' ? `step ${n}` : row.kind === 'idea' ? 'idea' : `item ${n}`;
+        const detail = String(row.detail || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        return `- ${label}: ${row.title}${detail ? ` — ${detail}` : ''}`;
+      })
+    : ['- none listed'];
+  const savedLines = saved.length
+    ? saved.map((row) => {
+        const label = row.stepLabel || row.stepWord || 'saved';
+        const detail = String(row.detail || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        return `- ${label}: ${row.title}${detail ? ` — ${detail}` : ''}`;
+      })
+    : ['- none saved'];
+  const analysisLines = analyses.slice(0, 3).map((row) => {
+    const summary = String(row.analysis || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 180);
+    return `- ${row.fileName || 'file'}${summary ? `: ${summary}` : ''}`;
+  });
+
+  return [
+    'ON THIS APPROACH (what the user sees on this Dashboard thread):',
+    `Title: ${item?.title || ''}`,
+    `Details: ${item?.description || 'None'}`,
+    'AI suggestions (procedure steps and ideas on screen):',
+    ...suggestionLines,
+    'Saved steps (Remembered next steps / Saved suggestions on this Dashboard):',
+    ...savedLines,
+    analyses.length ? 'File analyses on this approach:' : '',
+    ...analysisLines,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export function withSaveSteps(saved) {
   const entries = [...saved];
   const active = entries

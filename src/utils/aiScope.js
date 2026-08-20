@@ -17,7 +17,7 @@ export function looksLikePortfolioWork(text) {
 }
 
 export function looksLikeApproachWork(text) {
-  return /\b(analy[sz]e (this |the |a )?(file|upload|report|spreadsheet|docx?|csv)|compare (this |the )?file|import (this |the )?(file|report)|upload (this |the )?file|saved suggestions?|implementation steps?|how (do I|to) (staff|implement|fix|do)\b|file comparison|write (the |me )?(steps|a procedure)|procedure for|discuss (this|the|that) approach)\b/i.test(
+  return /\b(analy[sz]e (this |the |a )?(file|upload|report|spreadsheet|docx?|csv)|compare (this |the )?file|import (this |the )?(file|report)|upload (this |the )?file|saved suggestions?|implementation steps?|how (do I|to) (staff|implement|fix|do|use)\b|file comparison|write (the |me )?(steps|a procedure)|procedure( step)?|step\s*[123]|first step|second step|third step|this suggestion|this step|discuss (this|the|that) approach)\b/i.test(
     String(text || '')
   );
 }
@@ -48,6 +48,7 @@ export function resolveDiscussHandoff({ surface, userMessage } = {}) {
 
   if (surface === 'dashboard') {
     if (crossProject) return HANDOFF_TO_OVERVIEW;
+    if (looksLikeApproachWork(text) || localThis) return '';
     if (looksLikePortfolioWork(text) && !localThis) return HANDOFF_TO_OVERVIEW;
     if (askedCalendar || askedDelete) return '';
     if (looksLikePortfolioWork(text)) return HANDOFF_TO_OVERVIEW;
@@ -77,17 +78,18 @@ export function extraScopeNote({ surface, userMessage } = {}) {
 export function discussScopePrompt({ overview = false } = {}) {
   if (overview) {
     return [
-      'You only handle Overview work: prioritize projects, cluster work, drain queues, notice stale projects, and schedule across the portfolio.',
-      'If they ask for implementation steps, file analysis, saved suggestions, or a deep discussion of one approach, do not try it.',
+      'Match the question to OVERVIEW BRIEFING, the listed approaches, and this Overview thread first.',
+      'You handle Overview work: prioritize projects, cluster work, drain queues, notice stale projects, and schedule across the portfolio.',
+      'If they ask how to do implementation steps, file analysis, saved suggestions, or a deep discussion of one approach, do not try it.',
       'Say you cannot do that here and tell them to open that project on the Dashboard, then discuss the approach or drop the file there.',
-      'If any other action cannot be completed here, say so in one sentence and name the Dashboard as the place to finish it.',
+      'If the question does not match the briefing or this thread, say you do not see that here. Do not invent projects or buttons.',
     ].join(' ');
   }
   return [
-    'You only handle this one approach on the Dashboard: advice, steps, file analysis, saved suggestions, and calendar or delete for this approach.',
-    'If they ask which project to start, clustering, stale projects, or scheduling across the portfolio, do not try it.',
-    'Say you cannot do that here and tell them to open Overview.',
-    'If an action cannot be completed here, say so in one sentence. Name Overview when the work spans projects. If it belongs on this thread, tell them what to type here.',
+    'You handle this one approach on the Dashboard: advice, the listed on-screen suggestions and saved steps, file analysis, and calendar or delete for this approach.',
+    'If they mention a step, procedure, suggestion, file, or title from ON THIS APPROACH or this thread, answer it here. That is on-screen work, not Overview work.',
+    'If they ask which project to start, clustering, stale projects, or scheduling across the portfolio, do not try it. Tell them to open Overview.',
+    'If the question does not match this approach, the listed items, the calendar, a file analysis, or earlier messages in this thread, say you do not see that here and ask which listed item they mean. Do not invent other pages or buttons.',
   ].join(' ');
 }
 

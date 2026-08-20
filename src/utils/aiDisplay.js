@@ -25,12 +25,13 @@ export function looksLikeMachineReply(raw) {
 export function looksLikeLeakedReasoning(raw) {
   const text = String(raw || '').trim();
   if (!text) return false;
-  if (/^\s*(thinking process|analyze the request|rule check|analyze the dump content)\s*:/im.test(text)) {
+  const probe = (stripHiddenReasoning(text).trim() || text).slice(0, 400);
+  if (/^\s*(okay[,.]?\s*)?(thinking process|analyze the request|rule check|analyze the dump content)\s*:/im.test(probe)) {
     return true;
   }
   if (
-    /^(the user is asking|the user (asked|wants|said)|this falls under the rule|let me think|i need to (check|analyze|look|list))\b/i.test(
-      text
+    /^(okay[,.]?\s*)?(the user is asking|the user (asked|wants|said)|this falls under the rule|let me think|i need to (check|analyze|look|list))\b/i.test(
+      probe
     )
   ) {
     return true;
@@ -73,7 +74,10 @@ export function looksLikeScratchpad(text) {
 }
 
 export function needsDiscussRetry(raw) {
-  return looksLikeLeakedReasoning(raw) || looksLikeTruncatedReply(raw);
+  if (looksLikeLeakedReasoning(raw) || looksLikeTruncatedReply(raw)) return true;
+  if (visibleAssistantReply(raw)) return false;
+  const text = String(raw || '');
+  return THINK_OPEN.test(text) || isResponseDump(text);
 }
 
 export function isResponseDump(raw) {

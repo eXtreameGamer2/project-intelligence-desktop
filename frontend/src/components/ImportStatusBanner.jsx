@@ -42,6 +42,9 @@ export default function ImportStatusBanner({ job, progress, onOpenProject, onCan
         startedAt={progress?.startedAt}
         trained={progress?.trained}
       />
+      {progress?.notice ? (
+        <p className="mt-2 text-xs text-amber-200/90">{progress.notice}</p>
+      ) : null}
     </div>
   );
 }

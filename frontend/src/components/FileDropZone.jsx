@@ -5,7 +5,7 @@ import {
   importFocusReady,
 } from '../lib/importFocus';
 import { IMPORT_PROGRESS_CLOCK_ID } from '../lib/jobProgress';
-import { ACCEPTED_UPLOADS } from '../lib/uploadTypes';
+import { acceptedUploads } from '../lib/uploadTypes';
 
 export default function FileDropZone({
   onUpload,
@@ -20,6 +20,7 @@ export default function FileDropZone({
 }) {
   const focusReady = importFocusReady(importFocus);
   const blocked = disabled || isUploading || !focusReady;
+  const allowStructured = Boolean(multiPass) && Number(passCount) >= 4 && Number(passCount) <= 8;
 
   const handleFiles = (files) => {
     const file = files?.[0];
@@ -51,9 +52,10 @@ export default function FileDropZone({
       </div>
       <h3 className="text-lg font-semibold text-white">Import Feedback Reports</h3>
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
-        Drop spreadsheets, Word, PDF, PowerPoint, text, Markdown, JSON, or HTML.
-        Spreadsheets become named columns and rows, including Excel formula text and
-        saved results. Documents become headings and paragraphs.
+        Supported: Word, PDF, PowerPoint, or text.
+        <br />
+        Note: CSV, Excel, ODS, JSON, and HTML needs multi-pass enabled with 4 to 8
+        passes in Settings.
       </p>
 
       <div className="mx-auto mt-5 max-w-lg">
@@ -114,7 +116,7 @@ export default function FileDropZone({
         {isUploading ? 'Processing…' : 'Choose File'}
         <input
           type="file"
-          accept={ACCEPTED_UPLOADS}
+          accept={acceptedUploads({ structured: allowStructured })}
           className="hidden"
           disabled={blocked}
           onChange={pickFiles}
@@ -139,6 +141,9 @@ export default function FileDropZone({
             startedAt={aiProgress?.startedAt}
             trained={aiProgress?.trained}
           />
+          {aiProgress?.notice ? (
+            <p className="mt-2 text-xs text-amber-200/90">{aiProgress.notice}</p>
+          ) : null}
           {onCancel ? (
             <button
               type="button"

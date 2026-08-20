@@ -69,5 +69,5 @@ export function estimateTrainedFileJobMs(byteLength = 0, passCount = 1, { userId
   }
   if (weight <= 0) return fallback;
   const predicted = total / weight;
-  return clamp(Math.round(fallback * 0.28 + predicted * 0.72), 8000, 180000 * targetPasses);
+  return clamp(Math.round(fallback * 0.28 + predicted * 0.72), 8000, 20 * 60 * 1000);
 }

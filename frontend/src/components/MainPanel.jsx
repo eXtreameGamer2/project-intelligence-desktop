@@ -72,6 +72,9 @@ export default function MainPanel({
   hasProjects = false,
   onCreateProject,
   isCreating = false,
+  reasoningEnabled = true,
+  onReasoningChange,
+  showReasoning = false,
 }) {
   const [openItemId, setOpenItemId] = useState(null);
   const [focusSavedId, setFocusSavedId] = useState(null);
@@ -223,6 +226,9 @@ export default function MainPanel({
           analyzingSavedId={analyzingSavedId}
           focusSavedId={focusSavedId}
           aiProgress={aiProgress}
+          reasoningEnabled={reasoningEnabled}
+          onReasoningChange={onReasoningChange}
+          showReasoning={showReasoning}
         />
       )}
     </main>

@@ -56,6 +56,7 @@ export { clearApiKeyMemory };
 export const DEFAULT_MULTI_PASS_COUNT = 3;
 export const MIN_MULTI_PASS_COUNT = 2;
 export const MAX_MULTI_PASS_COUNT = 8;
+export const MIN_STRUCTURED_MULTI_PASS_COUNT = 4;
 
 export const DEFAULT_AI_SETTINGS = {
   provider: 'localhost',
@@ -64,6 +65,7 @@ export const DEFAULT_AI_SETTINGS = {
   apiKey: '',
   hasApiKey: false,
   localTrainingEnabled: false,
+  reasoningEnabled: true,
   multiPassImportEnabled: false,
   multiPassImportCount: DEFAULT_MULTI_PASS_COUNT,
 };
@@ -79,6 +81,11 @@ export function effectiveMultiPassCount(settings) {
   return clampPassCount(settings.multiPassImportCount);
 }
 
+export function allowsStructuredImport(settings) {
+  const passes = effectiveMultiPassCount(settings);
+  return passes >= MIN_STRUCTURED_MULTI_PASS_COUNT && passes <= MAX_MULTI_PASS_COUNT;
+}
+
 function settingsStorageKey(userId) {
   return userId ? `${AI_SETTINGS_KEY}:${userId}` : AI_SETTINGS_KEY;
 }
@@ -90,6 +97,7 @@ function normalizeAiSettings(settings) {
   next.apiKey = typeof next.apiKey === 'string' ? next.apiKey : '';
   next.hasApiKey = Boolean(next.hasApiKey);
   next.localTrainingEnabled = Boolean(next.localTrainingEnabled);
+  next.reasoningEnabled = next.reasoningEnabled !== false;
   next.multiPassImportCount = clampPassCount(next.multiPassImportCount);
   next.multiPassImportEnabled = Boolean(next.localTrainingEnabled && next.multiPassImportEnabled);
   return next;
@@ -249,6 +257,7 @@ export async function hydrateAiSettings(userId) {
     baseUrl: rest.baseUrl,
     modelName: rest.modelName,
     localTrainingEnabled: Boolean(rest.localTrainingEnabled),
+    reasoningEnabled: rest.reasoningEnabled !== false,
     multiPassImportEnabled: Boolean(rest.localTrainingEnabled && rest.multiPassImportEnabled),
     multiPassImportCount: clampPassCount(rest.multiPassImportCount),
   };
@@ -279,6 +288,7 @@ export async function saveAiSettings(settings, userId) {
     baseUrl: next.baseUrl,
     modelName: next.modelName,
     localTrainingEnabled: Boolean(next.localTrainingEnabled),
+    reasoningEnabled: next.reasoningEnabled !== false,
     multiPassImportEnabled: Boolean(next.localTrainingEnabled && next.multiPassImportEnabled),
     multiPassImportCount: clampPassCount(next.multiPassImportCount),
   };
@@ -288,14 +298,19 @@ export async function saveAiSettings(settings, userId) {
   return publicAiSettings(next, Boolean(encrypted));
 }
 
-export function buildAiHeaders(settings) {
+export function buildAiHeaders(settings, { chat = false } = {}) {
   return {
     'x-ai-provider': 'localhost',
     'x-ai-base-url': localhostAiUrl(parseLocalhostPort(settings.baseUrl)),
     'x-ai-model-name': settings.modelName || '',
     'x-ai-local-training': settings.localTrainingEnabled ? '1' : '0',
+    'x-ai-reasoning': chat && settings.reasoningEnabled !== false ? '1' : '0',
     'x-ai-multi-pass': settings.localTrainingEnabled && settings.multiPassImportEnabled ? '1' : '0',
-    'x-ai-multi-pass-count': String(clampPassCount(settings.multiPassImportCount)),
+    'x-ai-multi-pass-count': String(
+      settings.localTrainingEnabled && settings.multiPassImportEnabled
+        ? clampPassCount(settings.multiPassImportCount)
+        : 1
+    ),
     'x-user-api-key': settings.apiKey || getMemoryApiKey() || '',
     ...(settings.importFocus
       ? { 'x-ai-import-focus': String(settings.importFocus) }
@@ -383,7 +398,7 @@ async function readSsePayload(response, onProgress) {
 
 export async function apiRequest(
   path,
-  { method = 'GET', body, user, aiSettings, formData, accessToken, onProgress, signal } = {}
+  { method = 'GET', body, user, aiSettings, formData, accessToken, onProgress, signal, chatReasoning = false } = {}
 ) {
   const headers = {};
 
@@ -396,7 +411,7 @@ export async function apiRequest(
   }
 
   if (aiSettings) {
-    Object.assign(headers, buildAiHeaders(aiSettings));
+    Object.assign(headers, buildAiHeaders(aiSettings, { chat: Boolean(chatReasoning) }));
   }
 
   if (onProgress) {
@@ -657,6 +672,7 @@ export async function discussActionItem(user, projectId, itemId, message, aiSett
     method: 'POST',
     user,
     aiSettings,
+    chatReasoning: true,
     body: { message, clock: clientClock() },
     onProgress,
   });
@@ -708,6 +724,7 @@ export async function discussOverviewFeed(user, message, aiSettings, onProgress,
     method: 'POST',
     user,
     aiSettings,
+    chatReasoning: true,
     body: {
       message,
       choices: choices || undefined,

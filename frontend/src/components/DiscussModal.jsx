@@ -6,6 +6,7 @@ import CalendarProposalCard from './CalendarProposalCard';
 import { activeSaves, displayStepForSuggestion, withInferredProcedure } from '../lib/saveSteps';
 import { displayAssistantContent } from '../lib/aiDisplay';
 import { ACCEPTED_UPLOADS } from '../lib/uploadTypes';
+import ReasoningToggle from './ReasoningToggle';
 
 function latestAnalysis(analyses) {
   return [...analyses].sort(
@@ -183,6 +184,9 @@ export default function DiscussModal({
   analyzingSavedId,
   focusSavedId,
   aiProgress,
+  reasoningEnabled = true,
+  onReasoningChange,
+  showReasoning = false,
 }) {
   const [draft, setDraft] = useState('');
   const [pendingUpload, setPendingUpload] = useState(null);
@@ -580,6 +584,11 @@ export default function DiscussModal({
               {isDiscussing ? 'Sending…' : 'Send'}
             </button>
           </div>
+          {showReasoning && (
+            <div className="mt-2">
+              <ReasoningToggle enabled={reasoningEnabled} onChange={onReasoningChange} />
+            </div>
+          )}
         </form>
       </div>
     </div>,

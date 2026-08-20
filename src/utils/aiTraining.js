@@ -13,6 +13,7 @@ let schemaReady = false;
 export const MIN_MULTI_PASS_COUNT = 2;
 export const MAX_MULTI_PASS_COUNT = 8;
 export const DEFAULT_MULTI_PASS_COUNT = 3;
+export const MIN_STRUCTURED_MULTI_PASS_COUNT = 4;
 
 export function isLocalTrainingEnabled(req) {
   const provider = String(req?.headers?.['x-ai-provider'] || '').toLowerCase();
@@ -33,6 +34,10 @@ export function multiPassImportCount(req) {
   const raw = Number(req?.headers?.['x-ai-multi-pass-count']);
   if (!Number.isInteger(raw)) return DEFAULT_MULTI_PASS_COUNT;
   return Math.min(MAX_MULTI_PASS_COUNT, Math.max(MIN_MULTI_PASS_COUNT, raw));
+}
+
+export function allowsStructuredImport(req) {
+  return isMultiPassImportEnabled(req) && multiPassImportCount(req) >= MIN_STRUCTURED_MULTI_PASS_COUNT;
 }
 
 export function looksLikeCorrection(text) {

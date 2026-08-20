@@ -25,6 +25,9 @@ export default function OverviewPage({
   proposalError,
   onCreateProject,
   isCreating = false,
+  reasoningEnabled = true,
+  onReasoningChange,
+  showReasoning = false,
 }) {
   return (
     <div className="flex min-h-[calc(100vh-9rem)] min-w-0 flex-col gap-5 xl:flex-row xl:items-stretch">
@@ -61,6 +64,9 @@ export default function OverviewPage({
             onDismissProposal={onDismissProposal}
             proposalBusyId={proposalBusyId}
             proposalError={proposalError}
+            reasoningEnabled={reasoningEnabled}
+            onReasoningChange={onReasoningChange}
+            showReasoning={showReasoning}
           />
         </aside>
       )}

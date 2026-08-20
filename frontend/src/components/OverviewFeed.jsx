@@ -3,6 +3,7 @@ import ChatMarkdown from './ChatMarkdown';
 import AiProgress from './AiProgress';
 import CalendarProposalCard from './CalendarProposalCard';
 import { displayAssistantContent } from '../lib/aiDisplay';
+import ReasoningToggle from './ReasoningToggle';
 
 export default function OverviewFeed({
   messages = [],
@@ -15,6 +16,9 @@ export default function OverviewFeed({
   onDismissProposal,
   proposalBusyId,
   proposalError,
+  reasoningEnabled = true,
+  onReasoningChange,
+  showReasoning = false,
 }) {
   const [draft, setDraft] = useState('');
   const bottomRef = useRef(null);
@@ -137,7 +141,12 @@ export default function OverviewFeed({
           className="input-field resize-none py-2 text-sm"
           disabled={isDiscussing}
         />
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {showReasoning ? (
+            <ReasoningToggle enabled={reasoningEnabled} onChange={onReasoningChange} />
+          ) : (
+            <span />
+          )}
           <button type="submit" className="btn-secondary px-3 py-2 text-sm" disabled={isDiscussing}>
             {isDiscussing ? 'Thinking…' : 'Send'}
           </button>

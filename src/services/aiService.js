@@ -1,9 +1,10 @@
 import { extractActionItems, extractSuggestions, extractOverviewChoicePayload, clampApproachPriority } from '../utils/jsonRepair.js';
 import { correctionInstruction, formatTrainingPrompt, isLocalTrainingEnabled, loadJobTimingEstimate, recordJobTiming } from '../utils/aiTraining.js';
 import { extractStreamParts, readProviderSse } from '../utils/aiProgress.js';
-import { createJobProgress, estimateInputChars } from '../utils/jobProgress.js';
+import { createJobProgress, estimateFileJobMs, estimateInputChars } from '../utils/jobProgress.js';
 import { canceledError, clientAbortSignal, isCanceledError } from '../utils/requestAbort.js';
 import { redactSecrets } from '../utils/secrets.js';
+import { formatApproachScreenBriefing } from '../utils/actionItemView.js';
 import {
   formatOverviewBriefing,
   formatOverviewChoiceBriefing,
@@ -43,6 +44,7 @@ import {
   dumpRecoveryFallback,
   explainsHowToRespond,
   isResponseDump,
+  looksLikeLeakedReasoning,
   looksLikeMachineReply,
   needsDiscussRetry,
   visibleAssistantReply,
@@ -54,6 +56,7 @@ import {
 } from '../utils/importFocus.js';
 import { FILE_READ_PROMPT } from '../utils/fileReadGuide.js';
 import { parseApproachesWithRetry } from '../utils/aiErrorHandler.js';
+import { selectNewApproaches } from '../utils/reportApproaches.js';
 import { prisma } from '../db/client.js';
 import { resolveRequestUser } from '../middleware/auth.js';
 import {
@@ -61,7 +64,9 @@ import {
   contextBudget,
   contextLengthFor,
   fitImportPrompt,
+  overflowImportNotice,
   parseContextLimitError,
+  planImportWindows,
   rememberContextLength,
   shrinkChatOptions,
 } from '../utils/aiContext.js';
@@ -70,6 +75,16 @@ import {
   extractContextLength,
   modelJsonGuardrail,
 } from '../utils/aiModelCatalog.js';
+import {
+  applyThinkingOff,
+  applyThinkingOn,
+  collectProviderReasoning,
+  isThinkingParamError,
+  nextThinkingCompat,
+  normalizeOpenAiCompatibleBase,
+  usesNoThinkPrompt,
+  withNoThink,
+} from '../utils/localAiCompat.js';
 
 const PROVIDERS = {
   PAID_CLOUD: 'paid-cloud',
@@ -79,7 +94,15 @@ const PROVIDERS = {
   LOCALHOST: 'localhost',
 };
 
-function buildAnalysisPrompt(focus) {
+function buildAnalysisPrompt(focus, { compact = false } = {}) {
+  if (compact) {
+    return `Return ONLY a JSON array of approaches for work already written after --- REPORT CONTENT ---.
+Focus: ${importFocusInstruction(focus)}
+Use RECORD Task/bug fields, or PAGE / PARAGRAPH / HEADING / LIST ITEM text. FILE TYPE and HOW TO READ are schema, not work.
+Do not invent spreadsheet features or product tools unless a labeled line asks for that.
+Each item: {"title":"...","description":"...","priority":1|2|3}. priority 1=high, 2=medium, 3=low.
+Title must copy or shorten work from those labeled lines. First character must be [. Empty array [] if nothing matches.`;
+  }
   return `You are a product intelligence assistant. Read the uploaded report and return ONLY a JSON array of approaches for work found IN THAT REPORT.
 
 ${FILE_READ_PROMPT}
@@ -104,7 +127,8 @@ Example shape only — invent new titles from the report, never reuse these stri
   {"title": "Add CSV export for reports", "priority": 2}
 ]
 
-Reply with the JSON array only. The first non-whitespace character must be [.`;
+Reply with the JSON array only. The first non-whitespace character must be [.
+Never write "We are given a report", "The user is asking", or a recap of these instructions. If you think first, still finish with the JSON array.`;
 }
 
 /**
@@ -123,7 +147,16 @@ export function resolveAiConfig(req) {
     req.headers['x-user-api-key'] = userApiKey ? '[redacted]' : '';
   }
 
-  return { provider, baseUrl, model, userApiKey };
+  const chatJob = isChatReasoningJob(req);
+  const chatRequested = headerFlagOn(req.headers['x-ai-reasoning'], true);
+  return {
+    provider,
+    baseUrl,
+    model,
+    userApiKey,
+    reasoningEnabled: chatJob && chatRequested,
+    forceDisableThinking: !chatJob,
+  };
 }
 
 const LOCALHOST_AI_HOST = '127.0.0.1';
@@ -150,10 +183,8 @@ function resolveLocalhostPort(baseUrl) {
 }
 
 function openAiCompatibleTarget(baseUrl, model, userApiKey) {
-  const normalized = String(baseUrl || '').replace(/\/$/, '');
-  const chatUrl = normalized.endsWith('/chat/completions')
-    ? normalized
-    : `${normalized}/chat/completions`;
+  const normalized = normalizeOpenAiCompatibleBase(baseUrl);
+  const chatUrl = `${normalized}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
   if (userApiKey) {
     headers.Authorization = `Bearer ${userApiKey}`;
@@ -363,10 +394,7 @@ function parseOpenAiResponse(payload) {
     collectVisibleText(message.content) ||
     collectVisibleText(choice?.text) ||
     collectVisibleText(payload?.output_text);
-  const reasoning =
-    collectReasoningText(message.reasoning_content) ||
-    collectReasoningText(message.reasoning) ||
-    collectReasoningText(choice?.reasoning);
+  const reasoning = collectReasoningText(collectProviderReasoning(message, choice, payload));
   const combined = combineModelText(content, reasoning);
 
   if (!combined) {
@@ -389,11 +417,12 @@ function parseAnthropicResponse(payload) {
  * @param {import('express').Request} req
  * @param {string} reportContent
  */
-export async function analyzeReportContent(req, reportContent, onProgress, examples = []) {
+export async function analyzeReportContent(req, reportContent, onProgress, examples = [], { allowRetry = true, compactPrompt = false } = {}) {
   try {
     onProgress?.({ step: 'Understanding' });
+    await syncConfigModel(req, resolveAiConfig(req), onProgress);
     const focus = resolveImportFocus(req);
-    const analysisPrompt = buildAnalysisPrompt(focus);
+    const analysisPrompt = buildAnalysisPrompt(focus, { compact: compactPrompt });
     const trainingExamples = isLocalTrainingEnabled(req) ? examples : [];
     const system =
       'Return only a JSON array of prioritized action items. The first character must be [. No markdown, no extra keys, no explanation. An empty array is allowed when nothing matches the requested focus.';
@@ -414,6 +443,7 @@ export async function analyzeReportContent(req, reportContent, onProgress, examp
       step: 'Repairing',
       allowsEmpty: allowsEmptyApproaches(focus),
       projectId: req.params?.projectId,
+      allowRetry,
     });
     const actionItems = parsed.actionItems;
 
@@ -426,6 +456,75 @@ export async function analyzeReportContent(req, reportContent, onProgress, examp
     rethrowIfUnreachable(error);
     throw error;
   }
+}
+
+export async function analyzeReportWithOverflow(req, reportContent, onProgress, examples = []) {
+  await syncConfigModel(req, resolveAiConfig(req), onProgress);
+  const nCtx = contextLengthFor(req, resolveAiConfig(req).provider);
+  const windows = planImportWindows(reportContent, nCtx);
+  const notice = overflowImportNotice({ nCtx, windowCount: windows.length });
+  const relayProgress = (event) => {
+    if (!onProgress) return;
+    if (typeof event === 'string') {
+      onProgress({ step: event, notice });
+      return;
+    }
+    onProgress({ ...event, notice });
+  };
+  if (windows.length <= 1) {
+    return analyzeReportContent(req, reportContent, onProgress, examples);
+  }
+
+  req._importWindowCount = windows.length;
+  req._importWindowIndex = 0;
+  if (req._jobStartedAt == null) req._jobStartedAt = Date.now();
+  req._importWindowStartedAt = Date.now();
+  req._expectedJobMs = estimateFileJobMs(
+    Number(req._jobFileBytes) || 0,
+    Number(req._jobPassCount) || 1,
+    windows.length
+  );
+
+  const overlayProgress = (event) => {
+    const raw = typeof event === 'string' ? { step: event } : { ...(event || {}) };
+    const index = Number(req._importWindowIndex) || 0;
+    const count = Number(req._importWindowCount) || 1;
+    const elapsed = Math.max(0, Date.now() - (Number(req._jobStartedAt) || Date.now()));
+    const total = Math.max(Number(req._expectedJobMs) || 1, elapsed + 4000);
+    const percent = Math.min(96, Math.max(8, Math.round(8 + (elapsed / total) * 88)));
+    relayProgress({
+      ...raw,
+      notice,
+      step: `Reading ${index + 1} of ${count}`,
+      percent,
+      remainingMs: remainingExpectedMs(req),
+    });
+  };
+
+  overlayProgress({ step: `Reading 1 of ${windows.length}` });
+  let items = [];
+  for (let index = 0; index < windows.length; index += 1) {
+    if (clientAbortSignal(req)?.aborted) throw canceledError();
+    req._importWindowIndex = index;
+    req._importWindowStartedAt = Date.now();
+    overlayProgress({ step: `Reading ${index + 1} of ${windows.length}` });
+    let part = { actionItems: [] };
+    try {
+      part = await analyzeReportContent(req, windows[index], overlayProgress, examples, {
+        allowRetry: true,
+        compactPrompt: true,
+      });
+    } catch (error) {
+      rethrowIfUnreachable(error);
+      if (!/did not include any action items|did not return any approaches/i.test(String(error.message || ''))) throw error;
+    }
+    const extra = selectNewApproaches(part.actionItems || [], items);
+    items = [...items, ...extra.accepted];
+  }
+  if (!items.length) {
+    throw new Error('The file was read, but the AI did not return any approaches from it.');
+  }
+  return { actionItems: items, analysisSource: 'ai' };
 }
 
 function importChatPayload(req, { system, preamble, reportContent, extra = '' }) {
@@ -443,6 +542,7 @@ function importChatPayload(req, { system, preamble, reportContent, extra = '' })
       system: guarded,
       messages: [{ role: 'user', content: fitted.userContent }],
       maxTokens: fitted.maxTokens,
+      stream: false,
     },
     report: fitted.report,
   };
@@ -471,6 +571,7 @@ export async function expandReportApproaches(
 ) {
   try {
     onProgress?.({ step: 'Expanding' });
+    await syncConfigModel(req, resolveAiConfig(req), onProgress);
     const focus = resolveImportFocus(req);
     const trainingExamples = isLocalTrainingEnabled(req) ? examples : [];
     const high = Number(remaining?.[1]) || 0;
@@ -538,6 +639,7 @@ export async function refineReportContent(
 ) {
   try {
     onProgress?.({ step: `Pass ${pass} of ${passCount}` });
+    await syncConfigModel(req, resolveAiConfig(req), onProgress);
     const focus = resolveImportFocus(req);
     const analysisPrompt = buildAnalysisPrompt(focus);
     const trainingExamples = isLocalTrainingEnabled(req) ? examples : [];
@@ -725,6 +827,19 @@ async function syncConfigModel(req, config, onProgress, requestedOverride) {
   }
 }
 
+async function listOllamaTagModels(target) {
+  try {
+    const origin = new URL(target.url).origin;
+    const headers = { ...target.headers };
+    delete headers['Content-Type'];
+    const response = await fetch(`${origin}/api/tags`, { method: 'GET', headers });
+    if (!response.ok) return [];
+    return parseModelEntries(await response.json());
+  } catch {
+    return [];
+  }
+}
+
 async function listProviderModels(target) {
   const url = modelsUrlForTarget(target);
   const headers = { ...target.headers };
@@ -734,34 +849,69 @@ async function listProviderModels(target) {
   try {
     response = await fetch(url, { method: 'GET', headers });
   } catch (error) {
+    const fallback = await listOllamaTagModels(target);
+    if (fallback.length) return fallback;
     throwUnreachable(error, url);
   }
 
   if (!response.ok) {
+    const fallback = await listOllamaTagModels(target);
+    if (fallback.length) return fallback;
     const errorText = await response.text();
     throw new Error(
       `Could not read AI models (${response.status}): ${redactSecrets(errorText.slice(0, 300))}`
     );
   }
 
-  const payload = await response.json();
-  return parseModelEntries(payload);
+  const entries = parseModelEntries(await response.json());
+  if (entries.length) return entries;
+  return listOllamaTagModels(target);
 }
 
 async function probeLocalContext(target, model) {
-  try {
-    const origin = new URL(target.url).origin;
-    const headers = { ...target.headers, 'Content-Type': 'application/json' };
+  const origin = new URL(target.url).origin;
+  const headers = { ...target.headers };
+  delete headers['Content-Type'];
+
+  const fromOllama = async () => {
     const response = await fetch(`${origin}/api/show`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: model, model }),
     });
     if (!response.ok) return null;
     return extractContextLength(await response.json());
-  } catch {
-    return null;
+  };
+
+  const fromLmStudio = async () => {
+    const response = await fetch(`${origin}/api/v0/models`, { method: 'GET', headers });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const entries = parseModelEntries(payload);
+    const wantedKey = modelKey(model);
+    const wantedBase = modelBase(model);
+    const match =
+      entries.find((row) => modelKey(row.id) === wantedKey) ||
+      entries.find((row) => modelBase(row.id) === wantedBase);
+    return match?.nCtx || extractContextLength(payload);
+  };
+
+  const fromLlamaCpp = async () => {
+    const response = await fetch(`${origin}/props`, { method: 'GET', headers });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return extractContextLength(payload?.default_generation_settings || payload);
+  };
+
+  for (const probe of [fromLmStudio, fromOllama, fromLlamaCpp]) {
+    try {
+      const nCtx = await probe();
+      if (nCtx) return nCtx;
+    } catch {
+      // try the next probe
+    }
   }
+  return null;
 }
 
 /**
@@ -814,30 +964,69 @@ export async function testAiConnection(req, onProgress) {
  * @param {import('express').Request} req
  * @param {{ system?: string, messages: Array<{ role: string, content: string }>, maxTokens?: number }} options
  */
-function modelUsesThinking(model) {
-  return /\b(gemma|qwen|qwq|deepseek|r1|gpt-oss|magistral)\b/i.test(String(model || ''));
+function headerFlagOn(value, fallback = false) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return fallback;
+  return !['0', 'false', 'off', 'no'].includes(raw);
 }
 
-function applyLocalThinkingOff(body, config) {
-  if (config._skipThinkingOff) return;
-  if (config.provider !== PROVIDERS.LOCALHOST && config.provider !== PROVIDERS.CUSTOM_ENDPOINT) {
-    return;
-  }
-  if (!modelUsesThinking(config.model || body.model)) return;
-  body.reasoning_effort = 'none';
-  body.enable_thinking = false;
-  body.chat_template_kwargs = { ...(body.chat_template_kwargs || {}), enable_thinking: false };
+function isChatReasoningJob(req) {
+  return String(req?._jobKind || '') === 'chat';
 }
 
-function isThinkingParamError(message) {
-  return /reasoning_effort|enable_thinking|chat_template_kwargs|unknown (field|parameter)|unrecognized/i.test(
-    String(message || '')
+function modelAlwaysThinks(model) {
+  return /\b(thinking|qwq|r1|reasoner)\b/i.test(String(model || ''));
+}
+
+function modelMayThink(model) {
+  return (
+    modelAlwaysThinks(model) ||
+    usesNoThinkPrompt(model) ||
+    /\b(phi-4-reasoning|nemotron|olmo)\b/i.test(String(model || ''))
   );
 }
 
+function applyLocalReasoning(body, config) {
+  if (config._skipReasoningParams) return;
+  if (config.provider !== PROVIDERS.LOCALHOST && config.provider !== PROVIDERS.CUSTOM_ENDPOINT) {
+    return;
+  }
+  const model = config.model || body.model;
+  const mode = config._thinkingCompat || 'broad';
+
+  if (config.forceDisableThinking) {
+    applyThinkingOff(body, mode);
+    return;
+  }
+
+  if (!modelMayThink(model)) return;
+
+  if (modelAlwaysThinks(model)) {
+    if (mode !== 'none') body.think = config.reasoningEnabled !== false;
+    return;
+  }
+
+  if (config.reasoningEnabled !== false) {
+    applyThinkingOn(body);
+    return;
+  }
+
+  applyThinkingOff(body, mode);
+}
+
 function applyChatMessages(target, config, { system, messages, maxTokens }) {
+  let nextSystem = system;
+  let nextMessages = messages;
+  if (config.forceDisableThinking && usesNoThinkPrompt(config.model || '')) {
+    nextSystem = nextSystem ? withNoThink(nextSystem) : nextSystem;
+    nextMessages = (messages || []).map((entry, index, list) => {
+      if (entry.role !== 'user' || index !== list.length - 1) return entry;
+      return { ...entry, content: withNoThink(entry.content) };
+    });
+  }
+
   if (config.provider === PROVIDERS.BYOK_ANTHROPIC) {
-    const prompt = [system, ...messages.map((entry) => `${entry.role}: ${entry.content}`)]
+    const prompt = [nextSystem, ...nextMessages.map((entry) => `${entry.role}: ${entry.content}`)]
       .filter(Boolean)
       .join('\n\n');
     target.body.messages = [{ role: 'user', content: prompt }];
@@ -846,13 +1035,13 @@ function applyChatMessages(target, config, { system, messages, maxTokens }) {
     }
   } else {
     target.body.messages = [
-      ...(system ? [{ role: 'system', content: system }] : []),
-      ...messages,
+      ...(nextSystem ? [{ role: 'system', content: nextSystem }] : []),
+      ...nextMessages,
     ];
     if (maxTokens) {
       target.body.max_tokens = maxTokens;
     }
-    applyLocalThinkingOff(target.body, config);
+    applyLocalReasoning(target.body, config);
   }
 }
 
@@ -938,10 +1127,49 @@ async function requestChat(target, stream, onProgress, expectedMs = null, signal
 }
 
 function remainingExpectedMs(req) {
+  const windows = Math.max(1, Number(req?._importWindowCount) || 1);
+  const index = Math.max(0, Number(req?._importWindowIndex) || 0);
+  const started = Number(req?._jobStartedAt) || Date.now();
+  const now = Date.now();
+  const elapsed = Math.max(0, now - started);
+
+  if (windows > 1) {
+    const windowStarted = Number(req._importWindowStartedAt) || started;
+    const inWindow = Math.max(0, now - windowStarted);
+    let perWindow = estimateFileJobMs(
+      Number(req._jobFileBytes) || 0,
+      Number(req._jobPassCount) || 1,
+      windows
+    ) / windows;
+    if (Number(req._expectedJobMs) > 0) {
+      perWindow = Number(req._expectedJobMs) / windows;
+    }
+    if (index > 0) {
+      const completedMs = Math.max(1, elapsed - inWindow);
+      perWindow = completedMs / index;
+      req._expectedJobMs = perWindow * windows;
+    } else if (!Number(req._expectedJobMs)) {
+      req._expectedJobMs = perWindow * windows;
+    }
+    return Math.max(4000, Math.round(perWindow * (windows - index) - inWindow));
+  }
+
   const expected = Number(req?._expectedJobMs);
   if (!Number.isFinite(expected) || expected <= 0) return null;
-  const started = Number(req._jobStartedAt) || Date.now();
-  return Math.max(3000, Math.round(expected - (Date.now() - started)));
+  return Math.max(3000, Math.round(expected - elapsed));
+}
+
+function innerProgressExpectedMs(req) {
+  const windows = Math.max(1, Number(req?._importWindowCount) || 1);
+  if (windows > 1) {
+    const total = Number(req._expectedJobMs) || estimateFileJobMs(
+      Number(req._jobFileBytes) || 0,
+      Number(req._jobPassCount) || 1,
+      windows
+    );
+    return Math.max(12000, Math.round(total / windows));
+  }
+  return remainingExpectedMs(req);
 }
 
 async function prepareJobTiming(req, inputChars) {
@@ -976,6 +1204,8 @@ function rememberSuccessfulChat(req, { inputChars, elapsedMs }) {
 
 async function completeChat(req, options, onProgress) {
   const config = resolveAiConfig(req);
+  if (!config._thinkingCompat) config._thinkingCompat = req._thinkingCompat || 'broad';
+  if (config._thinkingCompat === 'none') config._skipReasoningParams = true;
   await syncConfigModel(req, config, onProgress, options?.model);
   const chatStarted = Date.now();
   const inputChars = estimateInputChars(options?.messages || []);
@@ -993,7 +1223,7 @@ async function completeChat(req, options, onProgress) {
       target,
       stream,
       onProgress,
-      remainingExpectedMs(req),
+      innerProgressExpectedMs(req),
       clientAbortSignal(req)
     );
   };
@@ -1016,17 +1246,23 @@ async function completeChat(req, options, onProgress) {
   };
 
   const retryIfThinkingParam = async (error, opts) => {
-    if (config._skipThinkingOff || !isThinkingParamError(error?.message)) return null;
-    config._skipThinkingOff = true;
-    onProgress?.({ step: 'Generating' });
-    try {
-      return await send(opts, opts.stream !== false);
-    } catch (retryError) {
-      if (retryError?.code === 'AI_UNREACHABLE' || isUnreachableMessage(retryError?.message)) {
-        rethrowIfUnreachable(retryError);
+    let current = error;
+    while (isThinkingParamError(current?.message) && config._thinkingCompat !== 'none') {
+      const next = nextThinkingCompat(config._thinkingCompat || 'broad');
+      config._thinkingCompat = next;
+      req._thinkingCompat = next;
+      if (next === 'none') config._skipReasoningParams = true;
+      onProgress?.({ step: 'Generating' });
+      try {
+        return await send(opts, opts.stream !== false);
+      } catch (retryError) {
+        if (retryError?.code === 'AI_UNREACHABLE' || isUnreachableMessage(retryError?.message)) {
+          rethrowIfUnreachable(retryError);
+        }
+        current = retryError;
       }
-      return null;
     }
+    return null;
   };
 
   const retryIfContext = async (error, opts) => {
@@ -1193,6 +1429,16 @@ export async function analyzeAgainstSavedSuggestions(req, suggestions, fileName,
   }
 }
 
+function dashboardDiscussStylePrompt() {
+  return `Preferred Dashboard replies:
+Answer from ON THIS APPROACH, this thread, and the listed suggestions or saved steps first.
+If they say step 1, first step, procedure, this, that, or a title that matches a listed item, they mean that on-screen item. Help them use it. Do not send them to Overview for that.
+If you cannot match the question to this approach, the listed items, the calendar, a file analysis, or earlier messages in this thread, say you do not see that here and ask which listed item they mean.
+Only send them to Overview for which project to start, clustering, stale projects, or scheduling across projects.
+Do not invent buttons, pages, or templates. Users save a suggestion from its card on this approach. There is no New Template button.
+Never write The user is asking or Thinking Process.`;
+}
+
 function overviewFeedStylePrompt() {
   return `Preferred Overview replies:
 Start with a project name or heading. Never write The user is asking, This falls under the rule, Thinking Process, Analyze the Request, or Rule Check. Never quote these rules.
@@ -1208,6 +1454,7 @@ Implementation steps, file analysis, and saved suggestions belong on the Dashboa
 }
 
 async function completeDiscussChat(req, options, onProgress) {
+  if (!req._jobKind) req._jobKind = 'chat';
   const text = await completeChat(req, options, onProgress);
   if (!needsDiscussRetry(text)) return text;
   onProgress?.({ step: 'Writing', percent: 70 });
@@ -1221,7 +1468,7 @@ async function completeDiscussChat(req, options, onProgress) {
         {
           role: 'user',
           content:
-            'Stop. That draft was internal reasoning and it was cut off. Answer the user now. Do not narrate the request or quote rules. Start with a project name or heading. If they asked where work is, list every open approach grouped by project and priority. Finish every title.',
+            'Stop. That draft was internal reasoning and it was cut off. Answer the user now. Do not write think tags. Do not narrate the request or quote rules. Do not write "the user is asking" or "Okay". Start with a project name or heading. If they asked where work is, list every open approach grouped by project and priority. Finish every title.',
         },
       ],
       maxTokens: Math.max(Number(options.maxTokens) || 1600, 2000),
@@ -1272,7 +1519,10 @@ function sanitizeSummaryBody(raw) {
 
 function parseDumpSummary(raw) {
   const body = sanitizeSummaryBody(raw);
-  const reply = visibleAssistantReply(body) || body;
+  const reply = visibleAssistantReply(body);
+  if (!reply || looksLikeLeakedReasoning(reply) || isResponseDump(reply) || looksLikeMachineReply(reply)) {
+    return { reply: '' };
+  }
   return { reply };
 }
 
@@ -1285,12 +1535,14 @@ async function summarizeDump(req, raw, context, onProgress) {
     userMessage: context?.userMessage,
   });
   const draft = String(raw || '').trim().slice(0, 5000);
+  const briefing = String(context?.briefing || '').trim().slice(0, 2500);
   const text = await completeChat(
     req,
     {
       system: `Rewrite a messy model dump into a short message the user can answer.
 Never mention dumps, JSON, schemas, PERMISSION, hidden reasoning, or that you are summarizing.
 Never write PERMISSION, CALENDAR, or APPROACH.
+Never write The user is asking, Okay, Let me check, or think tags.
 
 User already asked for a calendar change: ${askedCalendar ? 'yes' : 'no'}
 User already asked to delete an approach: ${askedDelete ? 'yes' : 'no'}
@@ -1302,11 +1554,18 @@ Rules:
 - If they already asked for a change that belongs here, describe it in 1-2 sentences as something you will do. Do not ask them to confirm.
 - If they did not ask, and the dump is proposing a calendar or delete that belongs here, ask one simple question: what you would do, then how to reply. Example: "I can add Staff standup Tuesday at 9:00 AM. Reply **yes** to add it, or tell me a different title or time."
 - If the dump is only advice that belongs here, give that advice in 2-4 short sentences and one simple follow-up if needed.
-- If they asked where work is or which approaches are open, list every approach from the dump, grouped by project and priority. Finish every title.
+- If they asked where work is, step coverage, open work, or which approaches are open, list the facts from OVERVIEW BRIEFING below, grouped by project and priority. Finish every title.
 - Never write Thinking Process, Analyze the Request, Rule Check, The user is asking, or This falls under the rule.
 - Start with a project name or heading.
 - Use simple Markdown. Advice: 2-5 sentences. Inventories: complete list.`,
-      messages: [{ role: 'user', content: `Dump:\n${draft}` }],
+      messages: [
+        {
+          role: 'user',
+          content: briefing
+            ? `OVERVIEW BRIEFING (source of truth):\n${briefing}\n\nDump:\n${draft}`
+            : `Dump:\n${draft}`,
+        },
+      ],
       maxTokens: context?.surface === 'overview' ? 1600 : 350,
       stream: false,
     },
@@ -1370,14 +1629,10 @@ async function finalizeDiscussReply(req, raw, split, context, onProgress) {
     };
   }
 
-  const dump =
-    isResponseDump(raw) ||
-    isResponseDump(split.reply) ||
-    looksLikeMachineReply(split.reply) ||
-    (!split.reply && Boolean(String(raw || '').trim()));
-  let reply = split.reply || '';
+  let reply = split.reply || visibleAssistantReply(raw) || '';
   let proposals = split.proposals || [];
   let dumpRecovered = false;
+  const dump = !reply || isResponseDump(reply) || looksLikeMachineReply(reply);
 
   if (dump) {
     dumpRecovered = true;
@@ -1482,12 +1737,13 @@ export async function discussApproach(req, item, history, userMessage, onProgres
   const briefing = formatProjectCalendarBriefing(calendar, userClock);
   const listedApproaches = approaches?.length ? approaches : [item];
   const approachBriefing = formatApproachesBriefing(listedApproaches);
+  const screenBriefing = formatApproachScreenBriefing(item);
   const exampleStart = formatLocalIso(fallbackStartDate(userClock), userClock);
 
   try {
     onProgress?.({ step: 'Understanding', percent: 24 });
     const text = await completeDiscussChat(req, {
-      system: `You are a concise project-management coach for the Dashboard. Discuss only this one approach. Do not discuss the portfolio overview, clustering, or cross-project scheduling; that belongs on the Overview page. Give practical advice. Use simple Markdown: **bold**, lists, and short headings. Do not use tables, HTML, or hidden reasoning. Never write The user is asking or Thinking Process.\n\n${discussActionInstructions({ userMessage, exampleStart, overview: false })}\n\n${calendarVocabularyPrompt()}\n\n${calendarClockPrompt(userClock)}\nApproach: ${item.title}\nDetails: ${item.description || 'None'}\n${approachBriefing}\n${briefing}${formatTrainingPrompt(examples, { kind: 'project-discuss' })}${correctionInstruction(userMessage)}`,
+      system: `You are a concise project-management coach for the Dashboard. Discuss this one approach using what is on screen and in this thread. Do not discuss portfolio clustering or cross-project scheduling; that belongs on the Overview page. Give practical advice. Use simple Markdown: **bold**, lists, and short headings. Do not use tables, HTML, or hidden reasoning. Never write The user is asking or Thinking Process.\n\n${dashboardDiscussStylePrompt()}\n\n${discussActionInstructions({ userMessage, exampleStart, overview: false })}\n\n${calendarVocabularyPrompt()}\n\n${calendarClockPrompt(userClock)}\n${screenBriefing}\n\n${approachBriefing}\n${briefing}${formatTrainingPrompt(examples, { kind: 'project-discuss' })}${correctionInstruction(userMessage)}`,
       messages: [...recent, { role: 'user', content: userMessage }],
       maxTokens: 1600,
     }, onProgress);
@@ -1501,9 +1757,10 @@ export async function discussApproach(req, item, history, userMessage, onProgres
       userMessage,
       clock: userClock,
       surface: 'dashboard',
+      briefing: [screenBriefing, approachBriefing, briefing].filter(Boolean).join('\n\n'),
     };
     const split = extractCalendarProposals(text, context);
-    return withScopeNote(
+    const finalized = withScopeNote(
       attachApproachDeletes(
         await finalizeDiscussReply(req, text, split, context, onProgress),
         text,
@@ -1511,6 +1768,7 @@ export async function discussApproach(req, item, history, userMessage, onProgres
       ),
       { surface: 'dashboard', userMessage }
     );
+    return finalized;
   } catch (error) {
     rethrowIfUnreachable(error);
     throw error;
@@ -1556,9 +1814,10 @@ export async function discussOverview(req, overview, history, userMessage, onPro
       userMessage,
       clock: userClock,
       surface: 'overview',
+      briefing: [briefing, calendarBriefing, approachBriefing].filter(Boolean).join('\n\n'),
     };
     const split = extractCalendarProposals(text, context);
-    return withScopeNote(
+    const finalized = withScopeNote(
       attachApproachDeletes(
         await finalizeDiscussReply(req, text, split, context, onProgress),
         text,
@@ -1566,6 +1825,7 @@ export async function discussOverview(req, overview, history, userMessage, onPro
       ),
       { surface: 'overview', userMessage }
     );
+    return finalized;
   } catch (error) {
     rethrowIfUnreachable(error);
     throw error;

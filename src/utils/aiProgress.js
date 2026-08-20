@@ -110,6 +110,8 @@ export function extractStreamParts(payload) {
     (typeof delta.reasoning_content === 'string' && delta.reasoning_content) ||
     (typeof delta.reasoning === 'string' && delta.reasoning) ||
     (typeof delta.reasoning?.content === 'string' && delta.reasoning.content) ||
+    (typeof delta.thinking === 'string' && delta.thinking) ||
+    (typeof payload?.message?.thinking === 'string' && payload.message.thinking) ||
     '';
 
   return { content, reasoning };

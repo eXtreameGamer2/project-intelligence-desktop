@@ -154,10 +154,11 @@ export async function parseApproachesWithRetry({
   allowsEmpty = false,
   extraRules = '',
   projectId,
+  allowRetry = true,
 }) {
   let actionItems = safeExtract(rawText, reportContent);
   const classified = classifyApproachError(rawText, actionItems, { allowsEmpty });
-  if (!classified.retry) {
+  if (!classified.retry || allowRetry === false) {
     if (classified.errorClass !== 'empty-provider') {
       await recordModelReply(req, {
         ok: classified.errorClass === 'ok',

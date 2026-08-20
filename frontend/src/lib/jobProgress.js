@@ -2,10 +2,23 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function estimateFileJobMs(byteLength = 0, passCount = 1) {
+const MAX_JOB_MS = 20 * 60 * 1000;
+const IMPORT_WINDOW_MS = 56000;
+
+export function estimateImportWindowCount(byteLength = 0) {
+  const bytes = Math.max(0, Number(byteLength) || 0);
+  if (bytes < 24000) return 1;
+  return clamp(Math.ceil(bytes / 40000), 2, 8);
+}
+
+export function estimateFileJobMs(byteLength = 0, passCount = 1, windowCount = 0) {
   const kb = Math.max(0, Number(byteLength) || 0) / 1024;
   const passes = Math.max(1, Number(passCount) || 1);
-  return clamp((16000 + kb * 220) * passes, 18000 * passes, 180000 * passes);
+  const windows = Math.max(1, Number(windowCount) || estimateImportWindowCount(byteLength));
+  if (windows <= 1) {
+    return clamp((16000 + kb * 220) * passes, 18000 * passes, MAX_JOB_MS);
+  }
+  return clamp(IMPORT_WINDOW_MS * windows * passes, 20000, MAX_JOB_MS);
 }
 
 export function percentFromTiming(elapsedMs, remainingMs) {

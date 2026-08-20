@@ -188,8 +188,8 @@ export default function SettingsView({
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            The IP is locked to this computer. Change the port if your local AI server is not
-            on 1234.
+            The IP is locked to this computer. Change the port for your local server (1234 LM Studio,
+            11434 Ollama, 8080 llama.cpp, and other OpenAI-compatible apps).
           </p>
         </div>
 
@@ -409,7 +409,8 @@ export default function SettingsView({
           <div>
             <h3 className="text-base font-semibold text-white">Multi-pass imports</h3>
             <p className="mt-1 text-sm text-slate-400">
-              Save the file first, then let the connected AI re-read it several times before creating approaches.
+              Save the file, then re-read it several times. CSV, Excel, ODS, JSON, and HTML
+              need this on with 4 to 8 passes.
             </p>
           </div>
           <SettingSwitch
@@ -462,8 +463,8 @@ export default function SettingsView({
                 ))}
               </select>
               <p className="mt-2 text-xs text-slate-500">
-                Each pass re-reads the saved file and can correct missed or misread items. Save
-                Settings to apply.
+                CSV, Excel, ODS, JSON, and HTML need 4 to 8 passes. Other files can use 2 or 3.
+                Save Settings to apply.
               </p>
             </div>
           )}

@@ -6,13 +6,20 @@ import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { fileTypeHowToRead } from './fileReadGuide.js';
 
-const ALLOWED_EXTENSIONS = new Set([
-  '.xlsx',
-  '.xlsm',
-  '.xls',
-  '.ods',
+const EXCEL_EXTENSIONS = new Set(['.xlsx', '.xlsm', '.xls']);
+const STRUCTURED_EXTENSIONS = new Set([
+  ...EXCEL_EXTENSIONS,
   '.csv',
   '.tsv',
+  '.ods',
+  '.json',
+  '.html',
+  '.htm',
+]);
+const STRUCTURED_FILE_MESSAGE =
+  'CSV, Excel, ODS, JSON, and HTML need multi-pass import with 4 to 8 passes. Turn that on in Settings, or upload Word, PDF, PowerPoint, or text instead.';
+
+const DOCUMENT_EXTENSIONS = new Set([
   '.docx',
   '.pdf',
   '.pptx',
@@ -20,14 +27,8 @@ const ALLOWED_EXTENSIONS = new Set([
   '.md',
   '.markdown',
   '.log',
-  '.json',
-  '.html',
-  '.htm',
 ]);
 const ALLOWED_MIME_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel.sheet.macroenabled.12',
-  'application/vnd.ms-excel',
   'application/vnd.oasis.opendocument.spreadsheet',
   'text/csv',
   'application/csv',
@@ -43,11 +44,12 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/octet-stream',
 ]);
 const UNSUPPORTED_FILE_MESSAGE =
-  'Unsupported file type. Upload a spreadsheet, Word, PDF, PowerPoint, text, JSON, or HTML file.';
+  'Unsupported file type. Upload Word, PDF, PowerPoint, or text. CSV, Excel, ODS, JSON, and HTML need multi-pass with 4 to 8 passes.';
 
 const MAX_COLUMNS = 40;
-const MAX_RECORDS = 400;
-const MAX_DOC_BLOCKS = 500;
+const MAX_RECORDS = 2500;
+const MAX_DOC_BLOCKS = 2500;
+const MAX_FIELD_CHARS = 240;
 
 /**
  * @param {string} fileName
@@ -61,18 +63,31 @@ export function getFileExtension(fileName) {
  * Validate uploaded file type against supported import formats.
  * @param {{ originalname: string, mimetype: string }} file
  */
-export function validateUploadFile(file) {
+export function validateUploadFile(
+  file,
+  { allowStructured = false, includeOpenStructured = true } = {}
+) {
   const extension = getFileExtension(file.originalname);
+  const allowed = new Set(DOCUMENT_EXTENSIONS);
+  if (allowStructured) {
+    for (const ext of STRUCTURED_EXTENSIONS) allowed.add(ext);
+  } else if (includeOpenStructured) {
+    for (const ext of STRUCTURED_EXTENSIONS) {
+      if (!EXCEL_EXTENSIONS.has(ext)) allowed.add(ext);
+    }
+  }
 
-  if (!ALLOWED_EXTENSIONS.has(extension)) {
+  if (STRUCTURED_EXTENSIONS.has(extension) && !allowed.has(extension)) {
+    throw new Error(STRUCTURED_FILE_MESSAGE);
+  }
+
+  if (!allowed.has(extension)) {
     throw new Error(UNSUPPORTED_FILE_MESSAGE);
   }
 
   const mime = String(file.mimetype || '').toLowerCase();
-  if (mime && !ALLOWED_MIME_TYPES.has(mime)) {
-    if (!ALLOWED_EXTENSIONS.has(extension)) {
-      throw new Error(`Unsupported MIME type: ${file.mimetype}`);
-    }
+  if (mime && !ALLOWED_MIME_TYPES.has(mime) && !allowed.has(extension)) {
+    throw new Error(`Unsupported MIME type: ${file.mimetype}`);
   }
 }
 
@@ -272,33 +287,59 @@ function rowToRecord(columns, values) {
   return record;
 }
 
-function formatStructuredFile({ fileType, meta = [], columns = [], records = [] }) {
-  const lines = [
-    `FILE TYPE: ${fileType}`,
-    `HOW TO READ: ${fileTypeHowToRead(fileType)}`,
-    ...meta,
-  ];
-  if (columns.length) {
-    lines.push(`COLUMNS: ${columns.join(', ')}`);
-  }
-  lines.push('');
+function compactFieldValue(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_FIELD_CHARS);
+}
 
-  const shown = records.slice(0, MAX_RECORDS);
-  shown.forEach((record, index) => {
-    const entries = Object.entries(record).filter(([, value]) => String(value || '').trim());
-    if (!entries.length) return;
-    lines.push(`RECORD ${index + 1}`);
-    for (const [key, value] of entries) {
-      lines.push(`${key}: ${String(value).trim()}`);
+function sheetNameFromMeta(meta = []) {
+  const row = (meta || []).find((line) => /^SHEET:\s*/i.test(line));
+  return row ? String(row).replace(/^SHEET:\s*/i, '').trim() : '';
+}
+
+function formatRecordLine(index, record, sheetName) {
+  const fields = Object.entries(record || {}).filter(([, value]) => String(value || '').trim());
+  if (!fields.length) return '';
+  const body = fields.map(([key, value]) => `${key}: ${compactFieldValue(value)}`).join(' | ');
+  const sheet = sheetName ? `sheet=${sheetName} | ` : '';
+  return `RECORD ${index} | ${sheet}${body}`;
+}
+
+function formatWorkbook(fileType, sheets = []) {
+  const lines = [`FILE TYPE: ${fileType}`, `HOW TO READ: ${fileTypeHowToRead(fileType)}`];
+  let index = 0;
+  let omitted = 0;
+  for (const sheet of sheets) {
+    const name = String(sheet?.name || '').trim();
+    for (const extra of sheet?.extraMeta || []) {
+      if (extra) lines.push(extra);
     }
-    lines.push('');
-  });
-
-  if (records.length > MAX_RECORDS) {
-    lines.push(`... ${records.length - MAX_RECORDS} more records omitted`);
+    if (name) lines.push(`SHEET: ${name}`);
+    if (sheet?.columns?.length) lines.push(`COLUMNS: ${sheet.columns.join(', ')}`);
+    const records = Array.isArray(sheet?.records) ? sheet.records : [];
+    const shown = records.slice(0, MAX_RECORDS);
+    omitted += Math.max(0, records.length - shown.length);
+    for (const record of shown) {
+      index += 1;
+      const line = formatRecordLine(index, record, name);
+      if (line) lines.push(line);
+    }
   }
-
+  if (omitted) lines.push(`... ${omitted} more records omitted`);
   return lines.join('\n').trim();
+}
+
+function formatStructuredFile({ fileType, meta = [], columns = [], records = [] }) {
+  return formatWorkbook(fileType, [
+    {
+      name: sheetNameFromMeta(meta),
+      columns,
+      records,
+      extraMeta: (meta || []).filter((line) => !/^SHEET:\s*/i.test(line)),
+    },
+  ]);
 }
 
 function parseCsvTable(text, delimiter = ',') {
@@ -544,34 +585,50 @@ function tableRowsToStructured(fileType, rows, meta = []) {
 
 function parseSheetJsBuffer(buffer, fileType) {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  const chunks = [];
+  const sheets = [];
   for (const name of workbook.SheetNames || []) {
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
-    const chunk = tableRowsToStructured(fileType, rows, [`SHEET: ${name}`]);
-    if (chunk) chunks.push(chunk);
+    const parsed = parseCsvLikeRows(rows);
+    if (!parsed.records.length) continue;
+    sheets.push({ name, columns: parsed.columns, records: parsed.records });
   }
-  return { content: chunks.join('\n\n'), fileType };
+  return { content: formatWorkbook(fileType, sheets), fileType };
+}
+
+function parseCsvLikeRows(rows) {
+  const nonempty = (rows || []).filter((row) =>
+    (Array.isArray(row) ? row : []).some((cell) => String(cell ?? '').trim())
+  );
+  if (!nonempty.length) return { columns: [], records: [] };
+  const first = nonempty[0] || [];
+  const hasHeader = looksLikeHeader(first);
+  const columns = uniqueHeaders(
+    hasHeader
+      ? first.slice(0, MAX_COLUMNS).map((cell) => String(cell ?? '').trim())
+      : first.slice(0, MAX_COLUMNS).map((_, index) => `column_${index + 1}`)
+  );
+  const dataRows = hasHeader ? nonempty.slice(1) : nonempty;
+  const records = dataRows.map((row) =>
+    rowToRecord(
+      columns,
+      (Array.isArray(row) ? row : []).slice(0, MAX_COLUMNS).map(formatCsvCell)
+    )
+  );
+  return { columns, records };
 }
 
 async function parseExcelOpenXml(buffer, fileType) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
-  const chunks = [];
+  const sheets = [];
   workbook.eachSheet((sheet) => {
     const { columns, records } = parseSheetRecords(sheet);
     if (!records.length) return;
-    chunks.push(
-      formatStructuredFile({
-        fileType,
-        meta: [`SHEET: ${sheet.name}`],
-        columns,
-        records,
-      })
-    );
+    sheets.push({ name: sheet.name, columns, records });
   });
-  return { content: chunks.join('\n\n'), fileType };
+  return { content: formatWorkbook(fileType, sheets), fileType };
 }
 
 async function extractPdfContent(buffer) {
@@ -631,8 +688,11 @@ async function extractPptxContent(buffer) {
  * @param {{ buffer: Buffer, originalname: string }} file
  * @returns {Promise<{ content: string, fileType: string }>}
  */
-export async function extractFileContent(file) {
-  validateUploadFile(file);
+export async function extractFileContent(
+  file,
+  { allowStructured = false, includeOpenStructured = true } = {}
+) {
+  validateUploadFile(file, { allowStructured, includeOpenStructured });
 
   const extension = getFileExtension(file.originalname);
 

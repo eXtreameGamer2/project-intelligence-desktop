@@ -97,31 +97,51 @@ export function extractContextLength(entry) {
   if (entry == null) return null;
   if (typeof entry === 'number' || typeof entry === 'string') return clampNCtx(entry);
 
-  const direct =
+  const loaded = clampNCtx(
+    entry.loaded_context_length ||
+      entry.loaded_n_ctx ||
+      entry.n_ctx ||
+      entry.num_ctx ||
+      entry.meta?.loaded_context_length ||
+      entry.meta?.n_ctx ||
+      entry.parameters?.num_ctx
+  );
+  if (loaded) return loaded;
+
+  const fromParamString = clampNCtx(String(entry.parameters || '').match(/num_ctx\s+(\d+)/i)?.[1]);
+  if (fromParamString) return fromParamString;
+
+  const architectural = clampNCtx(
     entry.max_model_len ||
-    entry.context_length ||
-    entry.n_ctx ||
-    entry.ctx_size ||
-    entry.meta?.n_ctx ||
-    entry.meta?.max_model_len ||
-    entry.details?.context_length ||
-    entry.model_info?.['llama.context_length'];
-  const fromDirect = clampNCtx(direct);
-  if (fromDirect) return fromDirect;
+      entry.context_length ||
+      entry.ctx_size ||
+      entry.meta?.max_model_len ||
+      entry.details?.context_length ||
+      entry.model_info?.['llama.context_length']
+  );
+  if (architectural && architectural <= 65536) return architectural;
 
   const stack = [entry];
+  let fallback = null;
   while (stack.length) {
     const current = stack.pop();
     if (!current || typeof current !== 'object') continue;
     for (const [key, value] of Object.entries(current)) {
-      if (/(context_length|n_ctx|max_model_len|ctx_size)$/i.test(key)) {
+      if (/loaded[_-]?context|loaded[_-]?n_ctx/i.test(key)) {
         const found = clampNCtx(value);
         if (found) return found;
+      }
+      if (
+        !fallback &&
+        /(n_ctx|max_model_len|ctx_size)$/i.test(key) &&
+        !/max_context_length/i.test(key)
+      ) {
+        fallback = clampNCtx(value);
       }
       if (value && typeof value === 'object') stack.push(value);
     }
   }
-  return null;
+  return fallback && fallback <= 65536 ? fallback : null;
 }
 
 function mapRow(row) {
@@ -302,6 +322,7 @@ export async function lookupModelProfile({ userId, provider = 'localhost', model
 function chooseNCtx(current, incoming, incomingSource) {
   const next = clampNCtx(incoming);
   if (!next) return { nCtx: current.nCtx, nCtxSource: current.nCtxSource };
+  if (incomingSource === 'listed') return { nCtx: next, nCtxSource: 'listed' };
   if (incomingSource === 'error') return { nCtx: next, nCtxSource: 'error' };
   if (current.nCtxSource === 'error') return { nCtx: current.nCtx, nCtxSource: 'error' };
   if (incomingSource === 'preload') return { nCtx: current.nCtx, nCtxSource: current.nCtxSource };
