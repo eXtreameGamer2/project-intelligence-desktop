@@ -1,8 +1,22 @@
 const LAST_SEEN_KEY = 'cpid-last-seen-version';
 
-export const CURRENT_APP_VERSION = '1.0.25';
+export const CURRENT_APP_VERSION = '1.0.26';
 
 export const PATCH_NOTES = [
+  {
+    version: '1.0.26',
+    date: '2026-08-19',
+    title: 'Import windows, data files, and chat reasoning',
+    changes: [
+      'Large files are read in sequential parts when they exceed the model’s loaded context. A notice appears on that import, and the progress countdown continues across those parts.',
+      'CSV, Excel, ODS, JSON, and HTML need Improve from past jobs plus multi-pass with 4 to 8 passes.',
+      'Word, PDF, PowerPoint, and text still import on a normal one-pass run.',
+      'Excel workbooks (.xlsx, .xlsm, .xls) are supported again under that multi-pass rule.',
+      'Dashboard and Overview have a Reasoning switch for chats only. Imports and other jobs never use reasoning.',
+      'Import approaches are taken from work in the file, not invented from column names or page/table titles.',
+      'The always-on context-limit hint under Settings and the importer is gone. The overflow notice still appears when an import is actually split.',
+    ],
+  },
   {
     version: '1.0.25',
     date: '2026-08-19',
