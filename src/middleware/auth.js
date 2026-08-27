@@ -4,7 +4,15 @@ import {
   upsertUserFromSupabase,
   verifySupabaseAccessToken,
 } from '../services/supabaseAuth.js';
-import { prisma } from '../db/client.js';
+import { prisma, databaseMode } from '../db/client.js';
+import { isDesktopRuntime } from '../utils/outboundUrl.js';
+
+export function allowDevHeaderAuth() {
+  if (isDesktopRuntime()) return true;
+  if (process.env.ALLOW_DEV_AUTH === '1') return true;
+  if (isSupabaseConfigured()) return false;
+  return databaseMode === 'local' && process.env.NODE_ENV !== 'production';
+}
 
 function readBearerToken(req) {
   const header = req.headers.authorization;
@@ -47,7 +55,7 @@ export function resolveRequestUser(req) {
     return req.authUser;
   }
 
-  if (isSupabaseConfigured()) {
+  if (!allowDevHeaderAuth()) {
     return null;
   }
 
@@ -56,7 +64,7 @@ export function resolveRequestUser(req) {
     return null;
   }
 
-  if (process.env.CPID_DESKTOP === '1') {
+  if (isDesktopRuntime()) {
     return { id: String(userId), tier: 'paid' };
   }
 

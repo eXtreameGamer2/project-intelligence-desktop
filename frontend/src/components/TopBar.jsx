@@ -46,7 +46,7 @@ export default function TopBar({
             className="rounded-full border border-slate-700 bg-surface-950 px-3 py-1 text-xs text-slate-400 transition hover:border-sky-500/40 hover:text-sky-200"
             title="Open patch notes"
           >
-            v{appVersion || '1.0.26'}
+            v{appVersion || '1.0.27'}
           </button>
         )}
         {(updateAvailable || updateReady) && (

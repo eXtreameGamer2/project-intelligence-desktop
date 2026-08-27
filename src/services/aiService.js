@@ -58,7 +58,12 @@ import { FILE_READ_PROMPT } from '../utils/fileReadGuide.js';
 import { parseApproachesWithRetry } from '../utils/aiErrorHandler.js';
 import { selectNewApproaches } from '../utils/reportApproaches.js';
 import { prisma } from '../db/client.js';
-import { resolveRequestUser } from '../middleware/auth.js';
+import { getUserWithTier, resolveRequestUser } from '../middleware/auth.js';
+import {
+  assertSafeAiBaseUrl,
+  isDesktopRuntime,
+  outboundFetch,
+} from '../utils/outboundUrl.js';
 import {
   clipPlainContent,
   contextBudget,
@@ -202,12 +207,39 @@ function openAiCompatibleTarget(baseUrl, model, userApiKey) {
   };
 }
 
+async function assertAiProviderAllowed(req, config) {
+  const user = resolveRequestUser(req);
+  if (!user) {
+    const error = new Error('Authentication required.');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (config.provider === PROVIDERS.LOCALHOST && !isDesktopRuntime()) {
+    const error = new Error('Localhost AI is only available in Project Intelligence Local.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (config.provider === PROVIDERS.PAID_CLOUD && !isDesktopRuntime()) {
+    const dbUser = await getUserWithTier(user.id);
+    if (dbUser?.tier !== 'paid') {
+      const error = new Error('Hosted OpenAI requires a cloud account.');
+      error.statusCode = 403;
+      error.code = 'PAID_TIER_REQUIRED';
+      throw error;
+    }
+  }
+}
+
 /**
  * Resolve endpoint URL and auth headers for the selected provider.
  * @param {{ provider: string, baseUrl: string, model: string, userApiKey: string }} config
  */
-function buildRequestTarget(config) {
+async function buildRequestTarget(config, req) {
+  await assertAiProviderAllowed(req, config);
   const { provider, baseUrl, model, userApiKey } = config;
+  const allowPrivate = isDesktopRuntime();
 
   switch (provider) {
     case PROVIDERS.PAID_CLOUD: {
@@ -235,8 +267,12 @@ function buildRequestTarget(config) {
         throw new Error('x-user-api-key header is required for BYOK OpenAI.');
       }
       const openAiBase = baseUrl?.trim() || 'https://api.openai.com/v1';
+      const safeBase = await assertSafeAiBaseUrl(openAiBase, {
+        allowPrivate,
+        allowedHosts: allowPrivate ? null : ['api.openai.com'],
+      });
       return {
-        url: `${openAiBase.replace(/\/$/, '')}/chat/completions`,
+        url: `${safeBase.replace(/\/$/, '')}/chat/completions`,
         headers: {
           Authorization: `Bearer ${userApiKey}`,
           'Content-Type': 'application/json',
@@ -274,7 +310,8 @@ function buildRequestTarget(config) {
       if (!baseUrl) {
         throw new Error('x-ai-base-url is required for custom-endpoint provider.');
       }
-      return openAiCompatibleTarget(baseUrl, model, userApiKey);
+      const safeBase = await assertSafeAiBaseUrl(baseUrl, { allowPrivate });
+      return openAiCompatibleTarget(safeBase, model, userApiKey);
     }
 
     case PROVIDERS.LOCALHOST:
@@ -767,7 +804,7 @@ async function listRunningLocalModels(target) {
     const origin = new URL(target.url).origin;
     const headers = { ...target.headers };
     delete headers['Content-Type'];
-    const response = await fetch(`${origin}/api/ps`, { method: 'GET', headers });
+    const response = await outboundFetch(`${origin}/api/ps`, { method: 'GET', headers });
     if (!response.ok) return [];
     return parseModelIds(await response.json());
   } catch {
@@ -793,7 +830,7 @@ async function syncConfigModel(req, config, onProgress, requestedOverride) {
   }
 
   try {
-    const target = buildRequestTarget(config);
+    const target = await buildRequestTarget(config, req);
     const available = await listedModelsFor(target);
     const ids = available.map((row) => row.id);
     const picked = matchProviderModel(requested, ids);
@@ -832,7 +869,7 @@ async function listOllamaTagModels(target) {
     const origin = new URL(target.url).origin;
     const headers = { ...target.headers };
     delete headers['Content-Type'];
-    const response = await fetch(`${origin}/api/tags`, { method: 'GET', headers });
+    const response = await outboundFetch(`${origin}/api/tags`, { method: 'GET', headers });
     if (!response.ok) return [];
     return parseModelEntries(await response.json());
   } catch {
@@ -847,7 +884,7 @@ async function listProviderModels(target) {
 
   let response;
   try {
-    response = await fetch(url, { method: 'GET', headers });
+    response = await outboundFetch(url, { method: 'GET', headers });
   } catch (error) {
     const fallback = await listOllamaTagModels(target);
     if (fallback.length) return fallback;
@@ -874,7 +911,7 @@ async function probeLocalContext(target, model) {
   delete headers['Content-Type'];
 
   const fromOllama = async () => {
-    const response = await fetch(`${origin}/api/show`, {
+    const response = await outboundFetch(`${origin}/api/show`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: model, model }),
@@ -884,7 +921,7 @@ async function probeLocalContext(target, model) {
   };
 
   const fromLmStudio = async () => {
-    const response = await fetch(`${origin}/api/v0/models`, { method: 'GET', headers });
+    const response = await outboundFetch(`${origin}/api/v0/models`, { method: 'GET', headers });
     if (!response.ok) return null;
     const payload = await response.json();
     const entries = parseModelEntries(payload);
@@ -897,7 +934,7 @@ async function probeLocalContext(target, model) {
   };
 
   const fromLlamaCpp = async () => {
-    const response = await fetch(`${origin}/props`, { method: 'GET', headers });
+    const response = await outboundFetch(`${origin}/props`, { method: 'GET', headers });
     if (!response.ok) return null;
     const payload = await response.json();
     return extractContextLength(payload?.default_generation_settings || payload);
@@ -1065,7 +1102,7 @@ async function requestChat(target, stream, onProgress, expectedMs = null, signal
 
     let response;
     try {
-      response = await fetch(target.url, {
+      response = await outboundFetch(target.url, {
         method: 'POST',
         headers: target.headers,
         body: JSON.stringify(body),
@@ -1217,7 +1254,7 @@ async function completeChat(req, options, onProgress) {
   };
 
   const send = async (opts, stream) => {
-    const target = buildRequestTarget(config);
+    const target = await buildRequestTarget(config, req);
     applyChatMessages(target, config, opts);
     return requestChat(
       target,

@@ -1,6 +1,7 @@
-const { app, ipcMain, shell } = require('electron');
+const { app, ipcMain } = require('electron');
 const https = require('node:https');
 const feed = require('./updateFeed.cjs');
+const { openSafeExternal } = require('./safeOpen.cjs');
 
 function currentVersion() {
   return String(app.getVersion() || '0.0.0');
@@ -230,7 +231,7 @@ function attachUpdater(mainWindow) {
       }
       const github = await latestFromGithub();
       if (github.downloadUrl) {
-        await shell.openExternal(github.downloadUrl);
+        await openSafeExternal(github.downloadUrl);
       }
       return statusPayload(github.available ? 'available' : 'current', github);
     } catch (error) {
@@ -249,14 +250,14 @@ function attachUpdater(mainWindow) {
     }
     const github = await latestFromGithub();
     if (github.downloadUrl) {
-      await shell.openExternal(github.downloadUrl);
+      await openSafeExternal(github.downloadUrl);
     }
     return statusPayload('available', github);
   });
 
   ipcMain.handle('updates:open-page', async () => {
     const url = `https://github.com/${feed.owner}/${feed.repo}/releases`;
-    await shell.openExternal(url);
+    await openSafeExternal(url);
     return { ok: true, url };
   });
 }

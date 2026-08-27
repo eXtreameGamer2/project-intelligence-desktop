@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../db/client.js';
-import { resolveRequestUser } from '../middleware/auth.js';
+import { requireAuth, resolveRequestUser } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { testAiConnection } from '../services/aiService.js';
 import { createProgressWriter } from '../utils/aiProgress.js';
 import { deleteTrainingExamples } from '../utils/aiTraining.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 router.delete('/training', async (req, res) => {
   try {
@@ -20,19 +23,27 @@ router.delete('/training', async (req, res) => {
   }
 });
 
-router.post('/test-connection', async (req, res) => {
-  const progress = createProgressWriter(req, res);
-  try {
-    const result = await testAiConnection(req, progress.stage);
-    progress.stage('Done', 100);
-    return progress.done(result);
-  } catch (error) {
-    return progress.fail(error.statusCode || 400, {
-      ok: false,
-      error: error.message,
-      code: error.code,
-    });
+router.post(
+  '/test-connection',
+  rateLimit({
+    windowMs: 60_000,
+    max: 12,
+    key: (req) => resolveRequestUser(req)?.id || req.ip,
+  }),
+  async (req, res) => {
+    const progress = createProgressWriter(req, res);
+    try {
+      const result = await testAiConnection(req, progress.stage);
+      progress.stage('Done', 100);
+      return progress.done(result);
+    } catch (error) {
+      return progress.fail(error.statusCode || 400, {
+        ok: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
   }
-});
+);
 
 export default router;

@@ -8,7 +8,7 @@ import {
   upsertUserFromSupabase,
   verifySupabaseAccessToken,
 } from '../services/supabaseAuth.js';
-import { resolveRequestUser } from '../middleware/auth.js';
+import { allowDevHeaderAuth, resolveRequestUser } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -59,10 +59,10 @@ router.get('/me', async (req, res) => {
 
 router.get('/bootstrap', async (_req, res) => {
   try {
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() || !allowDevHeaderAuth()) {
       return res.status(400).json({
-        error: 'Supabase auth is enabled. Sign in instead of using local bootstrap.',
-        authMode: 'supabase',
+        error: 'Sign in instead of using local bootstrap.',
+        authMode: isSupabaseConfigured() ? 'supabase' : 'cloud',
       });
     }
 

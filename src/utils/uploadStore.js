@@ -16,8 +16,34 @@ function safeFileName(name) {
   return base.slice(0, 120) || 'upload';
 }
 
+function safeIdSegment(value, fallback) {
+  const cleaned = String(value || fallback)
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 80);
+  return cleaned || fallback;
+}
+
+function assertInsideUploads(filePath) {
+  const resolved = path.resolve(filePath);
+  const root = path.resolve(uploadsRoot());
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (resolved !== root && !resolved.startsWith(prefix)) {
+    const error = new Error('Invalid upload path.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return resolved;
+}
+
+function uploadDir(userId, projectId) {
+  return assertInsideUploads(
+    path.join(uploadsRoot(), safeIdSegment(userId, 'user'), safeIdSegment(projectId, 'project'))
+  );
+}
+
 export async function saveUploadedFile({ userId, projectId, originalname, buffer }) {
-  const dir = path.join(uploadsRoot(), String(userId || 'user'), String(projectId || 'project'));
+  const dir = uploadDir(userId, projectId);
   await fs.promises.mkdir(dir, { recursive: true });
   const dest = path.join(dir, `${Date.now()}-${safeFileName(originalname)}`);
   await fs.promises.writeFile(dest, buffer);
@@ -25,17 +51,17 @@ export async function saveUploadedFile({ userId, projectId, originalname, buffer
 }
 
 export async function loadSavedUpload(filePath, originalname) {
-  const buffer = await fs.promises.readFile(filePath);
+  const buffer = await fs.promises.readFile(assertInsideUploads(filePath));
   return { buffer, originalname };
 }
 
 export async function removeSavedUpload(filePath) {
   if (!filePath) return;
-  await fs.promises.unlink(filePath).catch(() => {});
+  await fs.promises.unlink(assertInsideUploads(filePath)).catch(() => {});
 }
 
 export async function removeSavedUploadsForFile({ userId, projectId, originalname }) {
-  const dir = path.join(uploadsRoot(), String(userId || 'user'), String(projectId || 'project'));
+  const dir = uploadDir(userId, projectId);
   const suffix = `-${safeFileName(originalname)}`;
   let names = [];
   try {
@@ -53,6 +79,6 @@ export async function removeSavedUploadsForFile({ userId, projectId, originalnam
 }
 
 export async function removeProjectUploads({ userId, projectId }) {
-  const dir = path.join(uploadsRoot(), String(userId || 'user'), String(projectId || 'project'));
+  const dir = uploadDir(userId, projectId);
   await fs.promises.rm(dir, { recursive: true, force: true });
 }

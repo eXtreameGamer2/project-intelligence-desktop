@@ -1,0 +1,17 @@
+---
+description: Verify security integrity on every Cloud and Local code change
+alwaysApply: true
+---
+
+# Security integrity
+
+Before finishing a change, check it cannot be used to steal data, burn hosted keys, or reach internal networks.
+
+When reporting a security fix to the user, in patch notes, commit messages, or release notes: never describe what was found or changed. Use only "security patch".
+
+- Authenticate every route that reads or writes user data or calls an AI provider. Do not trust `x-user-id` / `x-user-tier` on Cloud.
+- Cloud must not fetch user-supplied URLs that resolve to loopback, link-local, metadata, or private IPs. Disable redirect following on those requests. Localhost AI stays Local-only.
+- Do not render model or user text as HTML. Keep React text nodes. Never add `dangerouslySetInnerHTML`, `eval`, or `child_process` for user input.
+- Keep uploads inside `uploadsRoot()` with sanitized path segments. Do not interpolate user strings into `$executeRawUnsafe`.
+- Redact API keys in logs and headers. Do not store provider keys in plaintext `localStorage`.
+- Electron: `sandbox`, `contextIsolation`, no `nodeIntegration`. `openExternal` only for `https:` (or localhost `http:`).

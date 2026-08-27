@@ -15,9 +15,9 @@ GitHub: https://github.com/eXtreameGamer2/project-intelligence-desktop
 
 Download the latest **Setup** from [GitHub Releases](https://github.com/eXtreameGamer2/project-intelligence-desktop/releases). Current build:
 
-https://github.com/eXtreameGamer2/project-intelligence-desktop/releases/tag/v1.0.26
+https://github.com/eXtreameGamer2/project-intelligence-desktop/releases/tag/v1.0.27
 
-Use **`Project-Intelligence-Local-Setup-1.0.26.exe`**. Do not install from git. The Setup file is larger than GitHub’s 100MB git limit, so it is not in the repo.
+Use **`Project-Intelligence-Local-Setup-1.0.27.exe`**. Do not install from git. The Setup file is larger than GitHub’s 100MB git limit, so it is not in the repo.
 
 The installer is unsigned. Windows may say the app cannot run or to check with the publisher. Right-click the `.exe` → Properties → **Unblock** if that checkbox is there, or use SmartScreen **More info** → **Run anyway** for this file you built.
 

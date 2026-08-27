@@ -1,9 +1,10 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const http = require('node:http');
 const { attachUpdater } = require('./updater.cjs');
+const { openSafeExternal } = require('./safeOpen.cjs');
 
 const HOST = '127.0.0.1';
 const DEFAULT_PORT = 4310;
@@ -145,12 +146,13 @@ function createWindow(port) {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openSafeExternal(url);
     return { action: 'deny' };
   });
   mainWindow.loadURL(`http://${HOST}:${port}`);
