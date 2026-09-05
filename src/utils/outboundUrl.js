@@ -131,6 +131,17 @@ export async function assertSafeAiBaseUrl(rawUrl, options = {}) {
   return parsed.toString().replace(/\/+$/, '');
 }
 
-export function outboundFetch(url, options = {}) {
-  return fetch(url, { ...options, redirect: 'error' });
+/**
+ * Fetch with redirect disabled. On Cloud, re-validates the URL host immediately
+ * before connecting to shrink DNS rebinding / TOCTOU windows.
+ */
+export async function outboundFetch(url, options = {}) {
+  const allowPrivate = options.allowPrivate === true || isDesktopRuntime();
+  const { allowPrivate: _ignored, ...fetchOptions } = options;
+
+  if (!allowPrivate) {
+    await assertSafeAiBaseUrl(url, { allowPrivate: false });
+  }
+
+  return fetch(url, { ...fetchOptions, redirect: 'error' });
 }

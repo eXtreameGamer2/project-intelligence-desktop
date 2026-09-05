@@ -10,6 +10,7 @@ import roadmapRoutes from './routes/roadmapRoutes.js';
 import overviewRoutes from './routes/overviewRoutes.js';
 import { installFrontendStatic } from './static/frontend.js';
 import { redactDeep, redactSecrets } from './utils/secrets.js';
+import { reflectAllowedOrigin } from './utils/corsOrigin.js';
 import { ensureTrainingSchema } from './utils/aiTraining.js';
 import { ensureModelCatalogSchema } from './utils/aiModelCatalog.js';
 import { ensureCalendarSchema } from './utils/calendar.js';
@@ -17,7 +18,7 @@ import { getAppVersion } from './utils/appVersion.js';
 
 const app = express();
 
-app.use(cors({ origin: true }));
+app.use(cors({ origin: reflectAllowedOrigin }));
 app.use(express.json({ limit: '2mb' }));
 app.use(attachAuthUser);
 

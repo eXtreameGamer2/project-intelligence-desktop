@@ -112,19 +112,15 @@ function publicAiSettings(settings, hasApiKey) {
 }
 
 function readStoredRecord(userId) {
-  const keys = [settingsStorageKey(userId)];
-  if (userId) keys.push(AI_SETTINGS_KEY);
-
-  for (const key of keys) {
-    const raw = localStorage.getItem(key);
-    if (!raw) continue;
-    try {
-      return { parsed: JSON.parse(raw), storageKey: key };
-    } catch {
-      localStorage.removeItem(key);
-    }
+  const key = settingsStorageKey(userId);
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return { parsed: JSON.parse(raw), storageKey: key };
+  } catch {
+    localStorage.removeItem(key);
+    return null;
   }
-  return null;
 }
 
 function writeStoredRecord(userId, record) {
@@ -135,14 +131,27 @@ function writeStoredRecord(userId, record) {
   }
 }
 
-export function hasSavedAiSettings(userId) {
-  return Boolean(readStoredRecord(userId));
-}
-
 const UNREACHABLE_KEY = 'cpid-ai-unreachable';
 
 function unreachableStorageKey(userId) {
   return userId ? `${UNREACHABLE_KEY}:${userId}` : UNREACHABLE_KEY;
+}
+
+/** Clear in-memory and persisted AI settings for this browser session / account. */
+export function clearStoredAiSettings(userId) {
+  clearApiKeyMemory();
+  try {
+    localStorage.removeItem(AI_SETTINGS_KEY);
+    if (userId) localStorage.removeItem(settingsStorageKey(userId));
+    localStorage.removeItem(unreachableStorageKey(userId));
+    localStorage.removeItem(UNREACHABLE_KEY);
+  } catch {
+    // Private mode can block storage; memory clear still applies.
+  }
+}
+
+export function hasSavedAiSettings(userId) {
+  return Boolean(readStoredRecord(userId));
 }
 
 export function isAiConnectionError(message, code) {

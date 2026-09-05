@@ -15,3 +15,4 @@ When reporting a security fix to the user, in patch notes, commit messages, or r
 - Keep uploads inside `uploadsRoot()` with sanitized path segments. Do not interpolate user strings into `$executeRawUnsafe`.
 - Redact API keys in logs and headers. Do not store provider keys in plaintext `localStorage`.
 - Electron: `sandbox`, `contextIsolation`, no `nodeIntegration`. `openExternal` only for `https:` (or localhost `http:`).
+- Server secured: Local API stays on `127.0.0.1`; do not rebind `HOST` to a LAN interface without a stronger session model. Run `npm run security:server` (and `--base` against the local API) before claiming desktop/server readiness.

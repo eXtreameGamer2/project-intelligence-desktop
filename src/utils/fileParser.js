@@ -3,21 +3,19 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
-import * as XLSX from 'xlsx';
 import { fileTypeHowToRead } from './fileReadGuide.js';
 
-const EXCEL_EXTENSIONS = new Set(['.xlsx', '.xlsm', '.xls']);
+const EXCEL_EXTENSIONS = new Set(['.xlsx', '.xlsm']);
 const STRUCTURED_EXTENSIONS = new Set([
   ...EXCEL_EXTENSIONS,
   '.csv',
   '.tsv',
-  '.ods',
   '.json',
   '.html',
   '.htm',
 ]);
 const STRUCTURED_FILE_MESSAGE =
-  'CSV, Excel, ODS, JSON, and HTML need multi-pass import with 4 to 8 passes. Turn that on in Settings, or upload Word, PDF, PowerPoint, or text instead.';
+  'CSV, Excel (.xlsx/.xlsm), JSON, and HTML need multi-pass import with 4 to 8 passes. Turn that on in Settings, or upload Word, PDF, PowerPoint, or text instead.';
 
 const DOCUMENT_EXTENSIONS = new Set([
   '.docx',
@@ -583,42 +581,6 @@ function tableRowsToStructured(fileType, rows, meta = []) {
   return formatStructuredFile({ fileType, meta, columns, records });
 }
 
-function parseSheetJsBuffer(buffer, fileType) {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  const sheets = [];
-  for (const name of workbook.SheetNames || []) {
-    const sheet = workbook.Sheets[name];
-    if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
-    const parsed = parseCsvLikeRows(rows);
-    if (!parsed.records.length) continue;
-    sheets.push({ name, columns: parsed.columns, records: parsed.records });
-  }
-  return { content: formatWorkbook(fileType, sheets), fileType };
-}
-
-function parseCsvLikeRows(rows) {
-  const nonempty = (rows || []).filter((row) =>
-    (Array.isArray(row) ? row : []).some((cell) => String(cell ?? '').trim())
-  );
-  if (!nonempty.length) return { columns: [], records: [] };
-  const first = nonempty[0] || [];
-  const hasHeader = looksLikeHeader(first);
-  const columns = uniqueHeaders(
-    hasHeader
-      ? first.slice(0, MAX_COLUMNS).map((cell) => String(cell ?? '').trim())
-      : first.slice(0, MAX_COLUMNS).map((_, index) => `column_${index + 1}`)
-  );
-  const dataRows = hasHeader ? nonempty.slice(1) : nonempty;
-  const records = dataRows.map((row) =>
-    rowToRecord(
-      columns,
-      (Array.isArray(row) ? row : []).slice(0, MAX_COLUMNS).map(formatCsvCell)
-    )
-  );
-  return { columns, records };
-}
-
 async function parseExcelOpenXml(buffer, fileType) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -713,16 +675,14 @@ export async function extractFileContent(
     case '.xlsx':
     case '.xlsm': {
       const fileType = extension === '.xlsm' ? 'xlsm' : 'xlsx';
-      try {
-        return await parseExcelOpenXml(file.buffer, fileType);
-      } catch {
-        return parseSheetJsBuffer(file.buffer, fileType);
-      }
+      return parseExcelOpenXml(file.buffer, fileType);
     }
 
     case '.xls':
     case '.ods': {
-      return parseSheetJsBuffer(file.buffer, extension.slice(1));
+      throw new Error(
+        'Legacy .xls/.ods uploads are not supported. Save the workbook as .xlsx and try again.'
+      );
     }
 
     case '.docx': {

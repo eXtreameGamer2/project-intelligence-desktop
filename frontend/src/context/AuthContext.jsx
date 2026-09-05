@@ -6,9 +6,8 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { bootstrapSession, fetchAuthConfig, fetchCurrentUser } from '../api/client';
+import { bootstrapSession, clearStoredAiSettings, fetchAuthConfig, fetchCurrentUser } from '../api/client';
 import { getAccessToken, getSupabaseClient, initSupabaseClient } from '../lib/supabase';
-import { clearApiKeyMemory } from '../lib/secureVault';
 
 const AuthContext = createContext(null);
 
@@ -40,7 +39,7 @@ export function AuthProvider({ children }) {
       }
 
       setUser(null);
-      clearApiKeyMemory();
+      clearStoredAiSettings();
       setAuthMode('supabase');
       return;
     }
@@ -77,7 +76,7 @@ export function AuthProvider({ children }) {
   }, [hydrateSession]);
 
   const signOut = useCallback(async () => {
-    clearApiKeyMemory();
+    clearStoredAiSettings(user?.id);
     const client = getSupabaseClient();
     if (client) {
       await client.auth.signOut();
@@ -88,7 +87,7 @@ export function AuthProvider({ children }) {
     } else {
       await hydrateSession();
     }
-  }, [authConfig, hydrateSession]);
+  }, [authConfig, hydrateSession, user?.id]);
 
   const value = useMemo(
     () => ({

@@ -135,6 +135,8 @@ export async function decryptSecret(payload, userId) {
   try {
     return await tryDecrypt(aadForUser(userId));
   } catch {
+    // Legacy blobs encrypted without AAD only decrypt for the empty / local user id.
+    if (userId) return '';
     return tryDecrypt();
   }
 }
