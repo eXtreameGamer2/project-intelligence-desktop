@@ -19,6 +19,53 @@ const tooltipStyle = {
   fontSize: '12px',
 };
 
+function wrapLabel(label, maxChars = 18) {
+  const text = String(label || '').trim() || 'Untitled';
+  if (text.length <= maxChars) return [text];
+
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (word.length > maxChars) {
+      let chunk = word;
+      while (chunk.length > maxChars) {
+        lines.push(chunk.slice(0, maxChars));
+        chunk = chunk.slice(maxChars);
+      }
+      current = chunk;
+    } else {
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.slice(0, 3);
+}
+
+function CategoryTick({ x, y, payload }) {
+  const lines = wrapLabel(payload?.value);
+  const startDy = -((lines.length - 1) * 6);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="end" fill="#94a3b8" fontSize={11}>
+        {lines.map((line, index) => (
+          <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? startDy : 12}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
+}
+
 function StatCard({ label, value, hint }) {
   return (
     <div className="panel p-4">
@@ -41,7 +88,7 @@ function ChartCard({ title, subtitle, children, empty }) {
           {empty}
         </p>
       ) : (
-        <div className="h-56">{children}</div>
+        <div className="h-64">{children}</div>
       )}
     </section>
   );
@@ -50,17 +97,18 @@ function ChartCard({ title, subtitle, children, empty }) {
 function HorizontalBars({ data, color }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 8, right: 12, left: 12, bottom: 0 }}>
         <CartesianGrid stroke="#1e293b" horizontal={false} />
         <XAxis type="number" allowDecimals={false} stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
         <YAxis
           type="category"
           dataKey="name"
-          width={92}
+          width={148}
           stroke="#64748b"
-          fontSize={12}
+          tick={<CategoryTick />}
           tickLine={false}
           axisLine={false}
+          interval={0}
         />
         <Tooltip contentStyle={tooltipStyle} />
         <Bar dataKey="value" radius={[0, 8, 8, 0]} fill={color} isAnimationActive={false}>

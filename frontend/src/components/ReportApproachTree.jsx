@@ -149,13 +149,6 @@ function ApproachRow({ item, isLast, onToggle, onOpenItem, onDelete, isUpdatingI
             <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${priorityBadgeClass(item.priority)}`}>
               {priorityDisplayLabel(item.priority)}
             </span>
-            <span
-              className={`font-medium ${
-                item.completed ? 'text-slate-500 line-through' : 'text-slate-100'
-              }`}
-            >
-              {item.title}
-            </span>
             {item.savedSuggestions?.length > 0 && (
               <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
                 {item.savedSuggestions.length > 1
@@ -164,8 +157,17 @@ function ApproachRow({ item, isLast, onToggle, onOpenItem, onDelete, isUpdatingI
               </span>
             )}
           </div>
+          <p
+            className={`mt-1 break-words font-medium leading-5 ${
+              item.completed ? 'text-slate-500 line-through' : 'text-slate-100'
+            }`}
+          >
+            {item.title}
+          </p>
           {item.description && (
-            <p className="mt-1 text-sm text-slate-400">{item.description}</p>
+            <p className="mt-1 max-h-28 overflow-y-auto break-words pr-1 text-sm leading-5 text-slate-400 whitespace-pre-wrap">
+              {item.description}
+            </p>
           )}
         </button>
         {onDelete ? (

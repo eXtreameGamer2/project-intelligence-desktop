@@ -1,8 +1,28 @@
 const LAST_SEEN_KEY = 'cpid-last-seen-version';
 
-export const CURRENT_APP_VERSION = '1.0.28';
+export const CURRENT_APP_VERSION = '1.0.30';
 
 export const PATCH_NOTES = [
+  {
+    version: '1.0.30',
+    date: '2026-09-05',
+    title: 'Approaches, charts, and updates',
+    changes: [
+      'Long approach titles and descriptions wrap or scroll instead of being cut off.',
+      'Open approaches by file chart labels use full names and wrap across lines.',
+      'The discuss window stays inside the app frame; long sections scroll.',
+      'Test Connection works with an empty optional API key on Local.',
+      'When an update is available, Dashboard and Overview show a clearer Update button that opens Settings at the Updates section.',
+    ],
+  },
+  {
+    version: '1.0.29',
+    date: '2026-09-05',
+    title: 'Security patch',
+    changes: [
+      'Security patch',
+    ],
+  },
   {
     version: '1.0.28',
     date: '2026-09-05',

@@ -98,6 +98,7 @@ export default function DashboardApp() {
   const [upcomingCalendar, setUpcomingCalendar] = useState([]);
   const [isOverviewDiscussing, setIsOverviewDiscussing] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
+  const [updatesFocusKey, setUpdatesFocusKey] = useState(0);
   const [saveAttention, setSaveAttention] = useState(0);
   const [aiSettings, setAiSettings] = useState(() => loadAiSettings(user?.id));
   const [draftSettings, setDraftSettings] = useState(() => loadAiSettings(user?.id));
@@ -407,6 +408,11 @@ export default function DashboardApp() {
     setActiveView(view);
     return true;
   }, []);
+
+  const openSettingsUpdates = useCallback(() => {
+    setUpdatesFocusKey((key) => key + 1);
+    requestNavigate('settings');
+  }, [requestNavigate]);
 
   const handleSelectProject = (projectId) => {
     if (!requestNavigate('dashboard')) return;
@@ -1394,7 +1400,7 @@ export default function DashboardApp() {
     trackAiProgress({ step: 'Connecting', percent: 4 });
 
     try {
-      const result = await testAiConnection(draftSettings, (event) => {
+      const result = await testAiConnection(user, draftSettings, (event) => {
         trackAiProgress(event);
         fillDiscoveredModel(event?.model);
       });
@@ -1495,6 +1501,7 @@ export default function DashboardApp() {
             updateReady={updateReady}
             activeView={activeView}
             onNavigate={requestNavigate}
+            onOpenUpdates={openSettingsUpdates}
             onOpenPatchNotes={() => openPatchNotes(true)}
             onShareRoadmap={handleShareRoadmap}
             onSignOut={authConfig?.enabled ? signOut : undefined}
@@ -1564,6 +1571,7 @@ export default function DashboardApp() {
               onCheckUpdates={handleCheckUpdates}
               onDownloadUpdate={handleDownloadUpdate}
               onInstallUpdate={handleInstallUpdate}
+              updatesFocusKey={updatesFocusKey}
             />
           )}
           {activeView === 'overview' && (

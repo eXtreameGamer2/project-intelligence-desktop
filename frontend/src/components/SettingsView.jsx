@@ -111,11 +111,20 @@ export default function SettingsView({
   onCheckUpdates,
   onDownloadUpdate,
   onInstallUpdate,
+  updatesFocusKey = 0,
 }) {
   const [confirmDeleteTraining, setConfirmDeleteTraining] = useState(false);
   const [trainingDeleteResult, setTrainingDeleteResult] = useState(null);
   const [savePulsing, setSavePulsing] = useState(false);
+  const [highlightUpdates, setHighlightUpdates] = useState(false);
   const saveButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!updatesFocusKey) return undefined;
+    setHighlightUpdates(true);
+    const timer = window.setTimeout(() => setHighlightUpdates(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [updatesFocusKey]);
 
   useEffect(() => {
     if (!saveAttention) return undefined;
@@ -479,6 +488,7 @@ export default function SettingsView({
         onDownload={onDownloadUpdate}
         onInstall={onInstallUpdate}
         onOpenPatchNotes={onOpenPatchNotes}
+        highlighted={highlightUpdates}
       />
 
       <LegalNotice />

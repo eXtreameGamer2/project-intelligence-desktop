@@ -18,11 +18,14 @@ export default function TopBar({
   updateReady = false,
   activeView,
   onNavigate,
+  onOpenUpdates,
   onShareRoadmap,
   onSignOut,
   isSharing,
   shareUrl,
 }) {
+  const openUpdates = onOpenUpdates || (() => onNavigate('settings'));
+
   return (
     <header className="panel mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4 px-5 py-4">
       <div>
@@ -47,16 +50,6 @@ export default function TopBar({
             title="Open patch notes"
           >
             v{appVersion || '1.0.28'}
-          </button>
-        )}
-        {(updateAvailable || updateReady) && (
-          <button
-            type="button"
-            onClick={() => onNavigate('settings')}
-            className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-200 transition hover:border-amber-400/50 hover:text-amber-100"
-            title={updateReady ? 'Restart from Settings to install the update' : 'Open Settings to download the update'}
-          >
-            {updateReady ? 'Restart to update' : 'Update available'}
           </button>
         )}
         <button
@@ -92,6 +85,24 @@ export default function TopBar({
         >
           Overview
         </button>
+        {(updateAvailable || updateReady) && activeView !== 'settings' && (
+          <button
+            type="button"
+            onClick={openUpdates}
+            className="update-available-pulse inline-flex items-center gap-2 rounded-xl border border-amber-300/70 bg-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-300"
+            title={
+              updateReady
+                ? 'Restart from Settings to install the update'
+                : 'Open Settings to download the update'
+            }
+          >
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-amber-950"
+              aria-hidden="true"
+            />
+            {updateReady ? 'Restart to update' : 'Update available'}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onNavigate('settings')}
@@ -99,6 +110,20 @@ export default function TopBar({
         >
           Settings
         </button>
+        {(updateAvailable || updateReady) && activeView === 'settings' && (
+          <button
+            type="button"
+            onClick={openUpdates}
+            className="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:border-amber-400/60 hover:bg-amber-500/25"
+            title={
+              updateReady
+                ? 'Restart from Settings to install the update'
+                : 'Jump to the Updates section'
+            }
+          >
+            {updateReady ? 'Restart to update' : 'Update available'}
+          </button>
+        )}
 
         <button
           type="button"

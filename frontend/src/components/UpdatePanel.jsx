@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 function statusMessage(status, currentVersion) {
   if (!status) return 'Check for a newer installer when you want one.';
   if (status.state === 'checking') return 'Checking for updates…';
@@ -29,15 +31,37 @@ export default function UpdatePanel({
   onDownload,
   onInstall,
   onOpenPatchNotes,
+  highlighted = false,
 }) {
+  const panelRef = useRef(null);
   const ready = status?.state === 'ready';
   const downloading = status?.state === 'downloading';
   const checking = status?.state === 'checking' || busy;
   const available = status?.state === 'available';
   const error = status?.state === 'error';
 
+  useEffect(() => {
+    if (!highlighted || !panelRef.current) return undefined;
+    panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const focusTarget =
+      panelRef.current.querySelector('[data-update-action]') || panelRef.current;
+    if (typeof focusTarget.focus === 'function') {
+      focusTarget.focus({ preventScroll: true });
+    }
+    return undefined;
+  }, [highlighted]);
+
   return (
-    <div className="panel space-y-4 p-6">
+    <div
+      id="settings-updates"
+      ref={panelRef}
+      tabIndex={-1}
+      className={`panel space-y-4 p-6 outline-none transition ${
+        highlighted
+          ? 'border-amber-400/70 ring-2 ring-amber-400/50 ring-offset-2 ring-offset-surface-950'
+          : ''
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-white">Updates</h3>
@@ -53,11 +77,22 @@ export default function UpdatePanel({
           {checking ? 'Checking…' : 'Check for updates'}
         </button>
         {ready ? (
-          <button type="button" className="btn-primary" onClick={onInstall}>
+          <button
+            type="button"
+            className="btn-primary"
+            data-update-action=""
+            onClick={onInstall}
+          >
             Restart and install
           </button>
         ) : available ? (
-          <button type="button" className="btn-primary" disabled={checking} onClick={onDownload}>
+          <button
+            type="button"
+            className="btn-primary"
+            data-update-action=""
+            disabled={checking}
+            onClick={onDownload}
+          >
             Download update
           </button>
         ) : null}

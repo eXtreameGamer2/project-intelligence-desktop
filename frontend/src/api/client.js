@@ -760,9 +760,10 @@ export async function shareRoadmap(user, projectId) {
   });
 }
 
-export async function testAiConnection(aiSettings, onProgress) {
+export async function testAiConnection(user, aiSettings, onProgress) {
   return apiRequest('/ai/test-connection', {
     method: 'POST',
+    user,
     aiSettings,
     onProgress,
   });

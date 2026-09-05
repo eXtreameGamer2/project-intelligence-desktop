@@ -328,14 +328,14 @@ export default function DiscussModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-black/65 p-6 md:p-12"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-black/65 p-3 sm:p-6"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="discuss-modal-title"
-        className="discuss-window panel flex max-h-[calc(100dvh-3rem)] w-full max-w-xl min-h-0 flex-col overflow-hidden p-0 shadow-2xl md:max-h-[calc(100dvh-6rem)]"
+        className="discuss-window panel flex max-h-full w-full max-w-xl min-h-0 min-w-0 flex-col overflow-hidden p-0 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
@@ -343,7 +343,10 @@ export default function DiscussModal({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
               Discuss this approach
             </p>
-            <h2 id="discuss-modal-title" className="mt-1 truncate text-lg font-semibold text-white">
+            <h2
+              id="discuss-modal-title"
+              className="mt-1 max-h-[min(4.5rem,14dvh)] overflow-y-auto pr-1 text-lg font-semibold leading-6 text-white break-words"
+            >
               {item.title}
             </h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -351,7 +354,9 @@ export default function DiscussModal({
               cross-project scheduling.
             </p>
             {item.description && (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-400">{item.description}</p>
+              <p className="mt-1 max-h-[min(7rem,18dvh)] overflow-y-auto pr-1 text-sm leading-5 text-slate-400 whitespace-pre-wrap">
+                {item.description}
+              </p>
             )}
           </div>
           <div className="flex shrink-0 items-start gap-2">
@@ -407,7 +412,7 @@ export default function DiscussModal({
         </div>
 
         {proposals.length > 0 && (
-          <div className="shrink-0 space-y-2 border-b border-slate-800 px-5 py-3">
+          <div className="max-h-[min(12rem,22dvh)] shrink-0 space-y-2 overflow-y-auto border-b border-slate-800 px-5 py-3">
             {proposals.map((proposal) => (
               <CalendarProposalCard
                 key={proposal.id}
@@ -436,8 +441,8 @@ export default function DiscussModal({
         )}
 
         {suggestions.length > 0 && (
-          <div className="shrink-0 border-b border-slate-800 px-5 py-3">
-            <div className="flex items-center justify-between gap-3">
+          <div className="flex min-h-0 max-h-[min(14rem,28dvh)] shrink flex-col overflow-hidden border-b border-slate-800 px-5 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 {usingSaveOrder
                   ? 'Your procedure'
@@ -463,7 +468,7 @@ export default function DiscussModal({
               )}
             </div>
             {pendingUpload && otherSaved.length > 0 && (
-              <div className="mt-2 rounded-xl border border-accent-500/40 bg-accent-500/10 px-3 py-3">
+              <div className="mt-2 shrink-0 rounded-xl border border-accent-500/40 bg-accent-500/10 px-3 py-3">
                 <p className="text-sm font-medium text-slate-100">
                   Link {pendingUpload.file.name} to the other saved suggestions?
                 </p>
@@ -493,7 +498,7 @@ export default function DiscussModal({
               </div>
             )}
 
-            <div className="mt-2 max-h-[14rem] space-y-2 overflow-y-auto pr-1">
+            <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
               {suggestions.map((suggestion, index) => (
                 <SuggestionCard
                   key={`${item.id}-modal-s-${index}`}
@@ -513,7 +518,7 @@ export default function DiscussModal({
           </div>
         )}
 
-        <div ref={threadRef} className="min-h-[7.5rem] flex-auto space-y-3 overflow-y-auto px-5 py-4">
+        <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
           {threadItems.length === 0 && !isDiscussing && !analyzingSavedId && (
             <p className="text-sm text-slate-500">
               {item.threadLoaded === false

@@ -53,7 +53,6 @@ export function reportDisplayName(report) {
   return String(report?.nickname || '').trim() || report?.fileName || 'Untitled file';
 }
 
-/** AI extraction cap per High/Med/Low. Not a user or billing limit. */
 export const MAX_APPROACHES_PER_PRIORITY = 10;
 
 export function reportRefreshState(items = []) {
@@ -78,7 +77,7 @@ export function reportRefreshState(items = []) {
   };
 }
 
-function shortName(name, max = 22) {
+function shortName(name, max = 40) {
   const value = String(name || 'Untitled');
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
@@ -109,7 +108,7 @@ export function buildProjectInsights(actionItems = [], reports = []) {
     .map((report) => {
       const leftover = openItems.filter((item) => item.reportId === report.id).length;
       return {
-        name: shortName(reportDisplayName(report)),
+        name: reportDisplayName(report) || 'Untitled',
         value: leftover,
       };
     })
@@ -129,7 +128,7 @@ export function buildProjectInsights(actionItems = [], reports = []) {
     sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
   }
   const sources = [...sourceCounts.entries()]
-    .map(([name, value]) => ({ name: shortName(name, 18), value }))
+    .map(([name, value]) => ({ name: shortName(name, 40), value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
 

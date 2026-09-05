@@ -125,6 +125,28 @@
   animation: unsaved-flash 0.55s ease-in-out 3;
 }
 
+@keyframes update-available-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.92;
+  }
+}
+
+.update-available-pulse {
+  animation: update-available-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-available-pulse {
+    animation: none;
+  }
+}
+
 .ai-progress-fill {
   transition: width 700ms linear;
   background-image: linear-gradient(
