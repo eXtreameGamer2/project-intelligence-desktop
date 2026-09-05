@@ -1,3 +1,5 @@
+import { resolveRequestUser } from './auth.js';
+
 const buckets = new Map();
 
 function prune(now) {
@@ -26,4 +28,13 @@ export function rateLimit({ windowMs = 60_000, max = 20, key } = {}) {
     }
     return next();
   };
+}
+
+/** Per authenticated user (or IP) limit for AI-heavy routes. */
+export function aiJobRateLimit({ windowMs = 60_000, max = 30 } = {}) {
+  return rateLimit({
+    windowMs,
+    max,
+    key: (req) => resolveRequestUser(req)?.id || req.ip,
+  });
 }

@@ -1,8 +1,16 @@
 const LAST_SEEN_KEY = 'cpid-last-seen-version';
 
-export const CURRENT_APP_VERSION = '1.0.27';
+export const CURRENT_APP_VERSION = '1.0.28';
 
 export const PATCH_NOTES = [
+  {
+    version: '1.0.28',
+    date: '2026-09-05',
+    title: 'Security patch',
+    changes: [
+      'Security patch',
+    ],
+  },
   {
     version: '1.0.27',
     date: '2026-08-27',

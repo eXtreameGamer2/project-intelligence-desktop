@@ -7,6 +7,7 @@ import {
   updateReportNickname,
   deleteReport,
 } from '../controllers/uploadController.js';
+import { aiJobRateLimit } from '../middleware/rateLimit.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -14,11 +15,12 @@ const upload = multer({
 });
 
 const router = Router({ mergeParams: true });
+const limitAi = aiJobRateLimit({ max: 20 });
 
 router.get('/', listProjectReports);
-router.post('/:reportId/expand', expandReport);
+router.post('/:reportId/expand', limitAi, expandReport);
 router.patch('/:reportId', updateReportNickname);
 router.delete('/:reportId', deleteReport);
-router.post('/upload', upload.single('file'), uploadReport);
+router.post('/upload', limitAi, upload.single('file'), uploadReport);
 
 export default router;

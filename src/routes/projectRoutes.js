@@ -37,6 +37,7 @@ import {
 import { loadProjectsOverview } from '../utils/projectOverview.js';
 import { serializeCalendarEntry, serializeCalendarProposal } from '../utils/calendar.js';
 import { removeProjectUploads } from '../utils/uploadStore.js';
+import { aiJobRateLimit } from '../middleware/rateLimit.js';
 
 const suggestionUpload = multer({
   storage: multer.memoryStorage(),
@@ -44,6 +45,7 @@ const suggestionUpload = multer({
 });
 
 const router = Router();
+const limitAi = aiJobRateLimit({ max: 30 });
 
 async function loadProjectDashboard(project, userId) {
   const [reports, actionItems, calendar, proposals] = await Promise.all([
@@ -241,13 +243,14 @@ router.get('/:projectId/action-items', listProjectActionItems);
 router.get('/:projectId/action-items/:itemId', getActionItem);
 router.patch('/:projectId/action-items/:itemId', updateActionItem);
 router.delete('/:projectId/action-items/:itemId', deleteActionItem);
-router.post('/:projectId/action-items/:itemId/suggestions', generateItemSuggestions);
+router.post('/:projectId/action-items/:itemId/suggestions', limitAi, generateItemSuggestions);
 router.post('/:projectId/action-items/:itemId/suggestions/save', saveItemSuggestion);
 router.post('/:projectId/action-items/:itemId/suggestions/complete', completeItemSuggestion);
 router.delete('/:projectId/action-items/:itemId/suggestions/:savedId', unsaveItemSuggestion);
-router.post('/:projectId/action-items/:itemId/discuss', discussItem);
+router.post('/:projectId/action-items/:itemId/discuss', limitAi, discussItem);
 router.post(
   '/:projectId/action-items/:itemId/suggestion-analyses',
+  limitAi,
   suggestionUpload.single('file'),
   analyzeSavedSuggestions
 );

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db/client.js';
 import { requireAuth, resolveRequestUser } from '../middleware/auth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { aiJobRateLimit } from '../middleware/rateLimit.js';
 import { testAiConnection } from '../services/aiService.js';
 import { createProgressWriter } from '../utils/aiProgress.js';
 import { deleteTrainingExamples } from '../utils/aiTraining.js';
@@ -25,11 +25,7 @@ router.delete('/training', async (req, res) => {
 
 router.post(
   '/test-connection',
-  rateLimit({
-    windowMs: 60_000,
-    max: 12,
-    key: (req) => resolveRequestUser(req)?.id || req.ip,
-  }),
+  aiJobRateLimit({ max: 12 }),
   async (req, res) => {
     const progress = createProgressWriter(req, res);
     try {

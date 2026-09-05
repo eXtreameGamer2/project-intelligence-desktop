@@ -9,9 +9,11 @@ import { isDesktopRuntime } from '../utils/outboundUrl.js';
 
 export function allowDevHeaderAuth() {
   if (isDesktopRuntime()) return true;
-  if (process.env.ALLOW_DEV_AUTH === '1') return true;
+  // Never trust spoofable headers when Supabase JWT auth is configured.
   if (isSupabaseConfigured()) return false;
-  return databaseMode === 'local' && process.env.NODE_ENV !== 'production';
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.ALLOW_DEV_AUTH === '1') return true;
+  return databaseMode === 'local';
 }
 
 function readBearerToken(req) {
