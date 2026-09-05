@@ -1,8 +1,17 @@
 const LAST_SEEN_KEY = 'cpid-last-seen-version';
 
-export const CURRENT_APP_VERSION = '1.0.30';
+export const CURRENT_APP_VERSION = '1.0.31';
 
 export const PATCH_NOTES = [
+  {
+    version: '1.0.31',
+    date: '2026-09-05',
+    title: 'Patch notes grouped by day',
+    changes: [
+      'Patch notes group multiple versions that ship on the same day under one date heading.',
+      'Earlier history expands by day, with a count of versions in each group.',
+    ],
+  },
   {
     version: '1.0.30',
     date: '2026-09-05',
@@ -314,6 +323,78 @@ export function compareVersions(left, right) {
 
 export function sortedPatchNotes() {
   return [...PATCH_NOTES].sort((left, right) => compareVersions(right.version, left.version));
+}
+
+/**
+ * Group version entries by calendar date (newest day first).
+ * Within each day, versions stay newest-first.
+ */
+export function groupPatchNotesByDate(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const groups = new Map();
+
+  for (const entry of list) {
+    const date = String(entry?.date || '').trim() || 'Undated';
+    if (!groups.has(date)) groups.set(date, []);
+    groups.get(date).push(entry);
+  }
+
+  return [...groups.entries()]
+    .sort((left, right) => {
+      if (left[0] === 'Undated') return 1;
+      if (right[0] === 'Undated') return -1;
+      return String(right[0]).localeCompare(String(left[0]));
+    })
+    .map(([date, items]) => ({
+      date,
+      entries: [...items].sort((a, b) => compareVersions(b.version, a.version)),
+    }));
+}
+
+export function formatPatchNoteDate(date) {
+  const value = String(date || '').trim();
+  if (!value || value === 'Undated') return 'Undated';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const month = months[Number(match[2]) - 1] || match[2];
+  return `${month} ${Number(match[3])}, ${match[1]}`;
+}
+
+function patchNoteDateKey(entry) {
+  return String(entry?.date || '').trim() || 'Undated';
+}
+
+/**
+ * Build main + earlier sections without splitting one calendar day across both.
+ * Any day represented in primaryEntries includes every version from that day.
+ */
+export function partitionPatchNotesForDisplay(allNotes, primaryEntries) {
+  const all = Array.isArray(allNotes) ? allNotes : [];
+  const primary = Array.isArray(primaryEntries) ? primaryEntries : [];
+  const primaryDates = new Set(primary.map(patchNoteDateKey));
+  const mainEntries = all.filter((entry) => primaryDates.has(patchNoteDateKey(entry)));
+  const mainVersions = new Set(mainEntries.map((entry) => entry.version));
+  const olderEntries = all.filter((entry) => !mainVersions.has(entry.version));
+
+  return {
+    mainGroups: groupPatchNotesByDate(mainEntries),
+    olderGroups: groupPatchNotesByDate(olderEntries),
+    olderVersionCount: olderEntries.length,
+  };
 }
 
 export function readLastSeenVersion() {

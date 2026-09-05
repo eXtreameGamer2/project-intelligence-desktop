@@ -1,0 +1,40 @@
+---
+description: Confirm testing vs LIVE; Admin silent/noted flags carry over per change on promotion.
+alwaysApply: true
+---
+
+# Release channel (testing vs LIVE)
+
+Project Intelligence has a **personal testing** copy and **LIVE production** GitHub apps. They are not interchangeable.
+
+## Channels
+
+| Channel | Role |
+|---------|------|
+| **Project Intelligence ADMIN** (private GitHub `eXtreameGamer2/project-intelligence-admin`) | Personal Admin build for developer testing only |
+| **LIVE Local** (`project-intelligence-desktop` on GitHub) | Production Local app / public installer releases |
+| **LIVE Cloud** (`centralized-project-intelligence-dashboard` on GitHub) | Production Cloud app |
+
+ADMIN is **not** a replacement for LIVE Local or Cloud.
+
+## Required gate
+
+Whenever the user asks to **commit**, **push**, **publish a release**, or **update the installer**:
+
+1. **Stop and ask** which channel: **Testing (ADMIN)** or **LIVE** (Local and/or Cloud).
+2. On **Admin** commit/push, also **always ask: Is this a silent update?** and record that flag for the change set.
+3. On **LIVE promotion**, carry each change’s **original Admin silent/noted flag** — do not remake the flag.
+   - **Silent** Admin work stays silent in production (no version bump / no patch notes for those items), even if other changes in the same LIVE push are noted.
+   - **Noted** Admin work stays noted (version + patch notes for those items only).
+   - Never reclassify silent work as noted just because the production push also includes a noted update.
+4. Do **not** commit, push, or publish until they confirm channel.
+5. Prefer ADMIN first, then LIVE only when explicitly asked.
+
+## Do not
+
+- Push testing-only work to LIVE repos without confirmation
+- Treat ADMIN as the production installer feed
+- Copy silent Admin-only patch details into LIVE/Cloud patch notes
+- Waste a production version bump on silent-flagged Admin work
+- Skip the silent-update question on Admin commit/push
+- Skip the channel question because “commit and push” sounded generic
