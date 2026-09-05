@@ -334,7 +334,7 @@ export function isCanceledError(error) {
   );
 }
 
-async function readSsePayload(response, onProgress) {
+async function readSsePayload(response, onProgress, onContent) {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error('Progress stream was empty.');
@@ -373,6 +373,9 @@ async function readSsePayload(response, onProgress) {
 
       if (eventName === 'stage') {
         onProgress?.(data);
+      } else if (eventName === 'content') {
+        // NEW: emit content chunks to the caller
+        onContent?.(data);
       } else if (eventName === 'done') {
         result = data;
       } else if (eventName === 'error') {
@@ -398,7 +401,7 @@ async function readSsePayload(response, onProgress) {
 
 export async function apiRequest(
   path,
-  { method = 'GET', body, user, aiSettings, formData, accessToken, onProgress, signal, chatReasoning = false } = {}
+  { method = 'GET', body, user, aiSettings, formData, accessToken, onProgress, onContent, signal, chatReasoning = false } = {}
 ) {
   const headers = {};
 
@@ -438,7 +441,8 @@ export async function apiRequest(
 
   const contentType = response.headers.get('content-type') || '';
   if (onProgress && contentType.includes('text/event-stream')) {
-    return readSsePayload(response, onProgress);
+    //Pass onContent along
+    return readSsePayload(response, onProgress, onContent);
   }
 
   const payload = await response.json().catch(() => ({}));
@@ -719,7 +723,7 @@ export async function fetchOverviewFeed(user) {
   return apiRequest('/overview/feed', { user });
 }
 
-export async function discussOverviewFeed(user, message, aiSettings, onProgress, choices, history) {
+export async function discussOverviewFeed(user, message, aiSettings, onProgress, choices, history, onContent) {
   return apiRequest('/overview/feed', {
     method: 'POST',
     user,
@@ -731,7 +735,7 @@ export async function discussOverviewFeed(user, message, aiSettings, onProgress,
       clock: clientClock(),
       history: Array.isArray(history) ? history.slice(-12) : undefined,
     },
-    onProgress,
+    onProgress, onContent,
   });
 }
 

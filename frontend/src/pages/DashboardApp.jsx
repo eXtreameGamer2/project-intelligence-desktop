@@ -287,7 +287,7 @@ export default function DashboardApp() {
         .then((payload) => {
           if (!cancelled && payload) setUpdateStatus(payload);
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           if (!cancelled) setUpdateBusy(false);
         });
@@ -510,7 +510,7 @@ export default function DashboardApp() {
     }
   };
 
-  const onProviderModel = useRef(() => {});
+  const onProviderModel = useRef(() => { });
 
   const applyProgressEvent = (setter) => (event) => {
     if (event?.model) onProviderModel.current(event.model);
@@ -1054,22 +1054,54 @@ export default function DashboardApp() {
     setIsOverviewDiscussing(true);
     setError('');
     trackAiProgress({ step: 'Reading', percent: 4 });
+
+    // ADD: Add user message immediately
+    const userMsg = { id: Date.now(), role: 'user', content: message };
+    setOverviewFeed(prev => [...prev, userMsg]);
+
+    // ADD: Add placeholder assistant message
+    const assistantId = Date.now() + 1;
+    setOverviewFeed(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
+
     try {
+      // MODIFY: Add onContent parameter (7th argument)
       const result = await discussOverviewFeed(
         user,
         message,
         aiSettings,
         trackAiProgress,
         overviewChoices,
-        overviewFeed
+        overviewFeed,
+        // 👇 NEW: onContent callback for streaming chunks
+        (chunk) => {
+          if (epoch !== feedEpoch.current) return; // Don't update if new chat started
+          const delta = chunk.content || chunk.delta || chunk.text || '';
+          if (!delta) return;
+          setOverviewFeed(prev =>
+            prev.map(msg =>
+              msg.id === assistantId
+                ? { ...msg, content: msg.content + delta }
+                : msg
+            )
+          );
+        }
       );
+
       if (showUnreachablePopup({ message: result.warning, source: result.source })) {
         return;
       }
-      if (epoch === feedEpoch.current) {
-        feedEpoch.current += 1;
-        setOverviewFeed(result.messages || []);
+
+      // IMPORTANT: Skip setting messages if they were already streamed
+      if (epoch === feedEpoch.current && result.messages) {
+        // Only add messages that aren't already in the feed
+        setOverviewFeed(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const newMessages = result.messages.filter(m => !existingIds.has(m.id) && m.role !== 'user');
+          return [...prev, ...newMessages];
+        });
       }
+
+      // Keep everything else exactly the same
       setOverviewProposals(result.proposals || []);
       if (result.upcomingCalendar) setUpcomingCalendar(result.upcomingCalendar);
       (result.entries || []).forEach((entry) => upsertCalendarEntry(entry));
@@ -1088,7 +1120,18 @@ export default function DashboardApp() {
         });
       }
       noteAiReachability('', { connected: true });
+
     } catch (err) {
+      // ADD: Show error in the assistant message
+      if (epoch === feedEpoch.current) {
+        setOverviewFeed(prev =>
+          prev.map(msg =>
+            msg.id === assistantId
+              ? { ...msg, content: '⚠️ Error: ' + err.message }
+              : msg
+          )
+        );
+      }
       if (!showUnreachablePopup(err)) {
         setError(err.message);
       }
@@ -1319,7 +1362,7 @@ export default function DashboardApp() {
     const next = { ...aiSettings, reasoningEnabled: Boolean(enabled) };
     setAiSettings(next);
     setDraftSettings((current) => ({ ...current, reasoningEnabled: Boolean(enabled) }));
-    saveAiSettings(next, user?.id).catch(() => {});
+    saveAiSettings(next, user?.id).catch(() => { });
   };
 
   const handleSaveSettings = async () => {
@@ -1382,7 +1425,7 @@ export default function DashboardApp() {
           }));
           setAiProviderSaved(true);
         })
-        .catch(() => {});
+        .catch(() => { });
       return next;
     });
   };
