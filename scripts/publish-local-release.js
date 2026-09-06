@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 
 const require = createRequire(import.meta.url);
-const { normalizeAdminVersion, isSilentVersion } = require('../electron/versionUtils.cjs');
+const { normalizeAdminVersion, isSilentVersion, toElectronBuilderVersion } = require('../electron/versionUtils.cjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -39,6 +39,7 @@ function findBuiltSetup() {
 function main() {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const appVersion = normalizeAdminVersion(pkg.version);
+  const feedVersion = toElectronBuilderVersion(appVersion);
   const tag = `v${appVersion}`;
   const publishName = `Project-Intelligence-Local-Setup-${appVersion}.exe`;
   const built = findBuiltSetup();
@@ -55,10 +56,11 @@ function main() {
   const sha = sha512Base64(target);
   const releaseDate = new Date().toISOString();
   const latestPath = path.join(RELEASE_DIR, 'latest.yml');
+  // latest.yml version must be electron-updater semver (1.0.32-s1), not dotted 1.0.32.1
   fs.writeFileSync(
     latestPath,
     [
-      `version: ${appVersion}`,
+      `version: ${feedVersion}`,
       'files:',
       `  - url: ${publishName}`,
       `    sha512: ${sha}`,

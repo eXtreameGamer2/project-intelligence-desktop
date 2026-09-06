@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('desktopUpdates', {
   currentVersion: () => ipcRenderer.invoke('updates:version'),
   check: () => ipcRenderer.invoke('updates:check'),
   download: () => ipcRenderer.invoke('updates:download'),
-  install: () => ipcRenderer.invoke('updates:install'),
+  install: (setupPath) => ipcRenderer.invoke('updates:install', setupPath || null),
   openReleases: () => ipcRenderer.invoke('updates:open-page'),
   onStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);

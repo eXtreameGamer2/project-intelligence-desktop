@@ -109,9 +109,9 @@ export async function downloadAppUpdate(status) {
   return status || { state: 'available' };
 }
 
-export async function installAppUpdate() {
+export async function installAppUpdate(status) {
   const desktop = desktopUpdatesApi();
-  if (desktop?.install) return desktop.install();
+  if (desktop?.install) return desktop.install(status?.setupPath || null);
   return { state: 'error', message: 'Install the desktop app to apply updates.' };
 }
 

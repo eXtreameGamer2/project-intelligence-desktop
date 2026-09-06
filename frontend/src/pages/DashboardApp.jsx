@@ -1459,7 +1459,7 @@ export default function DashboardApp() {
   };
 
   const handleInstallUpdate = async () => {
-    const payload = await installAppUpdate();
+    const payload = await installAppUpdate(updateStatus);
     if (payload) setUpdateStatus(payload);
   };
 
