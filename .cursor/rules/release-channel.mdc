@@ -24,18 +24,19 @@ Whenever the user asks to **commit**, **push**, **publish a release**, or **upda
 1. **Stop and ask** which channel: **Testing (ADMIN)** or **LIVE** (Local and/or Cloud).
 2. On **Admin** commit/push, also **always ask: Is this a silent update?** and record that flag for the change set.
 3. On **LIVE promotion**, carry each change’s **original Admin silent/noted flag** — do not remake the flag.
-   - **Silent** Admin work stays silent in production (no version bump / no patch notes for those items), even if other changes in the same LIVE push are noted.
-   - **Noted** Admin work stays noted (version + patch notes for those items only).
+   - **Silent** Admin work stays silent in production (no patch-note bullets for those items), even if other changes in the same LIVE push are noted.
+   - **Noted** Admin work stays noted (patch notes for those items only).
    - Never reclassify silent work as noted just because the production push also includes a noted update.
-4. Do **not** commit, push, or publish until they confirm channel.
-5. Prefer ADMIN first, then LIVE only when explicitly asked.
-6. After a **LIVE** publish succeeds, follow `live-code-scanning-triage.mdc`: sync GitHub Code Scanning from Admin `docs/security-codeql-triage.md` (dismiss + note only diagnosed items; leave undiagnosed alone).
+4. **LIVE Local always gets an updated installer** on production ship: bump version + `npm run release` (or equivalent). Silent-only batches still bump + publish the installer with no patch notes. Do not finish with push-only.
+5. Do **not** commit, push, or publish until they confirm channel.
+6. Prefer ADMIN first, then LIVE only when explicitly asked.
+7. After a **LIVE** publish succeeds, follow `live-code-scanning-triage.mdc`: sync GitHub Code Scanning from Admin `docs/security-codeql-triage.md` (dismiss + note only diagnosed items; leave undiagnosed alone).
 
 ## Do not
 
 - Push testing-only work to LIVE repos without confirmation
 - Treat ADMIN as the production installer feed
 - Copy silent Admin-only patch details into LIVE/Cloud patch notes
-- Waste a production version bump on silent-flagged Admin work
+- Skip the LIVE Local installer after a production Local commit/push
 - Skip the silent-update question on Admin commit/push
 - Skip the channel question because “commit and push” sounded generic
