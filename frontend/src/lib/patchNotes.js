@@ -304,17 +304,33 @@ export const PATCH_NOTES = [
   },
 ];
 
+export function normalizeAppVersion(value) {
+  const raw = String(value || '')
+    .trim()
+    .replace(/^v/i, '');
+  const asSilentPrerelease = raw.match(/^(\d+)\.(\d+)\.(\d+)-s(\d+)$/i);
+  if (asSilentPrerelease) {
+    return `${asSilentPrerelease[1]}.${asSilentPrerelease[2]}.${asSilentPrerelease[3]}.${asSilentPrerelease[4]}`;
+  }
+  const core = raw.split(/[+-]/, 1)[0];
+  const parts = core.split('.').map((part) => Number.parseInt(part, 10));
+  if (parts.some((part) => !Number.isFinite(part) || part < 0)) return '0.0.0';
+  while (parts.length < 3) parts.push(0);
+  if (parts.length === 3) return parts.join('.');
+  return `${parts[0]}.${parts[1]}.${parts[2]}.${parts[3] || 0}`;
+}
+
 export function parseVersion(value) {
-  return String(value || '0')
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0);
+  const normalized = normalizeAppVersion(value || '0');
+  const parts = normalized.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  while (parts.length < 4) parts.push(0);
+  return parts.slice(0, 4);
 }
 
 export function compareVersions(left, right) {
   const a = parseVersion(left);
   const b = parseVersion(right);
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < 4; index += 1) {
     const delta = (a[index] || 0) - (b[index] || 0);
     if (delta !== 0) return delta > 0 ? 1 : -1;
   }

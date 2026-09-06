@@ -46,14 +46,13 @@ Installed copies check GitHub Releases for `eXtreameGamer2/project-intelligence-
 
 Check for updates uses `latest.yml` and **`Project-Intelligence-Local-Setup-<version>.exe`** on the release (hyphens, not spaces).
 
-To publish a new version:
+To publish a new version (see `docs/local-versioning.md`):
 
-1. Bump `version` in `package.json` and `CURRENT_APP_VERSION` in `frontend/src/lib/patchNotes.js`.
-2. Build with `npm run dist`.
-3. Copy the Setup file to `Project-Intelligence-Local-Setup-<version>.exe` so the name matches `latest.yml`.
-4. Create a GitHub release tagged `v<version>` and attach that hyphenated Setup `.exe` plus `latest.yml` from `release/`.
+1. Silent: `npm run version:silent` (`1.0.32` → `1.0.32.1`) — no patch notes.  
+   Noted: `npm run version:noted` (`1.0.32.1` → `1.0.33`) — add patch notes.
+2. Publish with `npm run release` (stamps buildMeta, packs with semver-safe form, uploads dotted tag + Setup + `latest.yml`).
 
-`npm run release` can publish in one step if `GH_TOKEN` can create GitHub releases. Do not commit the Setup `.exe` to git.
+Do not bump the base patch for a silent ship. Do not commit the Setup `.exe` to git.
 
 Older installs (1.0.23 and below) do not include the updater. Those users install 1.0.24 from the release page once.
 

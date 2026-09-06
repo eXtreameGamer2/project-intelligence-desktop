@@ -1,31 +1,25 @@
 const { app, ipcMain } = require('electron');
 const https = require('node:https');
+const fs = require('node:fs');
+const path = require('node:path');
 const feed = require('./updateFeed.cjs');
 const { openSafeExternal } = require('./safeOpen.cjs');
+const { normalizeAdminVersion, compareVersions } = require('./versionUtils.cjs');
 
 function currentVersion() {
-  return String(app.getVersion() || '0.0.0');
-}
-
-function parseVersion(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[+-]/, 1)[0]
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0);
-}
-
-function compareVersions(left, right) {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) {
-    const delta = (a[index] || 0) - (b[index] || 0);
-    if (delta > 0) return 1;
-    if (delta < 0) return -1;
+  try {
+    const file = path.join(__dirname, 'buildMeta.json');
+    if (fs.existsSync(file)) {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const metaVersion = String(raw.version || '').trim();
+      if (metaVersion && metaVersion !== '0.0.0') {
+        return normalizeAdminVersion(metaVersion);
+      }
+    }
+  } catch {
+    // Fall through to Electron package version.
   }
-  return 0;
+  return normalizeAdminVersion(app.getVersion() || '0.0.0');
 }
 
 function githubRequest(pathname) {
@@ -93,7 +87,7 @@ async function latestFromGithub() {
     };
   }
 
-  const latest = String(result.body.tag_name || '').replace(/^v/i, '');
+  const latest = normalizeAdminVersion(String(result.body.tag_name || '').replace(/^v/i, ''));
   const asset = setupAsset(result.body);
   const available = compareVersions(latest, currentVersion()) > 0;
   return {
@@ -185,7 +179,7 @@ function attachUpdater(mainWindow) {
       if (app.isPackaged && autoUpdater) {
         try {
           const result = await autoUpdater.checkForUpdates();
-          const latest = result?.updateInfo?.version;
+          const latest = normalizeAdminVersion(result?.updateInfo?.version || '');
           if (latest && compareVersions(latest, currentVersion()) > 0) {
             const payload = statusPayload('available', {
               available: true,

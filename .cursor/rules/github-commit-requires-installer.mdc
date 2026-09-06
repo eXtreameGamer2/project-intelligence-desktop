@@ -1,0 +1,37 @@
+---
+description: GitHub commit/push on Admin or LIVE Local must always publish an updated installer
+alwaysApply: true
+---
+
+# GitHub commit/push ⇒ installer required
+
+Hard rule for **Project Intelligence ADMIN** and **LIVE Local** (`project-intelligence-desktop`):
+
+Whenever the user asks to **commit** and/or **push** to GitHub on those repos, the agent **must** also ship an **updated installer** in the same change set. Do not finish with commit/push alone.
+
+## Required sequence (same ship)
+
+1. Confirm channel (Testing Admin vs LIVE Local / Cloud) and carry Admin silent/noted on LIVE.
+2. Bump version with the correct kind (see release-channel / `docs/local-versioning.md`):
+   - **Silent:** `npm run version:silent` → `.N` (e.g. `1.0.32` → `1.0.32.1`) — no patch notes
+   - **Noted:** `npm run version:noted` → strip `.N`, bump base — patch notes as needed
+3. Commit (include the version bump).
+4. Push to GitHub.
+5. Publish installer: `npm run release` (GitHub Release tag `v{version}` + Setup exe + `latest.yml`).
+
+Steps 3–5 are not optional for Admin or LIVE Local. If push succeeds but release fails, fix and complete the installer before calling the task done.
+
+## Versioning still applies
+
+Always updating the installer does **not** allow a noted-style base bump for silent work. Silent = `.N` only.
+
+## Exceptions
+
+- **LIVE Cloud** has no desktop installer — commit/push only is fine there.
+- User explicitly says to skip the installer for this one ship (rare; record that skip).
+
+## Do not
+
+- Commit/push Admin or LIVE Local and stop
+- Republish the same version string without bumping (silent needs a new `.N`)
+- Treat docs-only or rules-only pushes as exempt on Admin / LIVE Local — still bump + installer

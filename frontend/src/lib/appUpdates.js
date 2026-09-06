@@ -11,20 +11,34 @@ export function githubLatestApiUrl() {
   return `https://api.github.com/repos/${UPDATE_FEED.owner}/${UPDATE_FEED.repo}/releases/latest`;
 }
 
-export function parseVersion(value) {
-  return String(value || '')
+/** Normalize 1.0.32-s2 or 1.0.32.2 → dotted form for silent .N compares. */
+export function normalizeAppVersion(value) {
+  const raw = String(value || '')
     .trim()
-    .replace(/^v/i, '')
-    .split(/[+-]/, 1)[0]
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0);
+    .replace(/^v/i, '');
+  const asSilentPrerelease = raw.match(/^(\d+)\.(\d+)\.(\d+)-s(\d+)$/i);
+  if (asSilentPrerelease) {
+    return `${asSilentPrerelease[1]}.${asSilentPrerelease[2]}.${asSilentPrerelease[3]}.${asSilentPrerelease[4]}`;
+  }
+  const core = raw.split(/[+-]/, 1)[0];
+  const parts = core.split('.').map((part) => Number.parseInt(part, 10));
+  if (parts.some((part) => !Number.isFinite(part) || part < 0)) return '0.0.0';
+  while (parts.length < 3) parts.push(0);
+  if (parts.length === 3) return parts.join('.');
+  return `${parts[0]}.${parts[1]}.${parts[2]}.${parts[3] || 0}`;
+}
+
+export function parseVersion(value) {
+  const normalized = normalizeAppVersion(value);
+  const parts = normalized.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  while (parts.length < 4) parts.push(0);
+  return parts.slice(0, 4);
 }
 
 export function compareVersions(left, right) {
   const a = parseVersion(left);
   const b = parseVersion(right);
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < 4; index += 1) {
     const delta = (a[index] || 0) - (b[index] || 0);
     if (delta > 0) return 1;
     if (delta < 0) return -1;
@@ -66,7 +80,7 @@ export async function checkAppUpdate(currentVersion) {
       throw new Error(`Update check failed (${response.status}).`);
     }
     const release = await response.json();
-    const latest = String(release.tag_name || '').replace(/^v/i, '');
+    const latest = normalizeAppVersion(String(release.tag_name || '').replace(/^v/i, ''));
     const asset = setupAsset(release);
     const available = compareVersions(latest, currentVersion) > 0;
     return {
