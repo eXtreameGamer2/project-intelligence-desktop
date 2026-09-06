@@ -1,0 +1,38 @@
+---
+description: On LIVE publish, sync GitHub code-scanning alerts from Admin CodeQL triage (notes/dismiss only when diagnosed)
+alwaysApply: true
+---
+
+# LIVE code scanning ↔ Admin triage
+
+When **LIVE production** updates are published (Local installer release and/or Cloud deploy/push that ships production), also review **GitHub Code Scanning** alerts on this LIVE repo.
+
+## Source of truth
+
+1. Read Admin triage: sibling `project-intelligence-admin` → `docs/security-codeql-triage.md` (and `docs/security-codeql-results.md` if needed).
+2. Match LIVE alerts by **rule id** + **path** (normalize paths when the same file exists on Admin and LIVE).
+3. Only act on alerts that were **diagnosed** in that triage (or an explicit chat diagnosis the user confirmed).
+
+## Actions
+
+| Admin triage verdict | LIVE GitHub alert action |
+|----------------------|---------------------------|
+| **Accept / FP / Accept (Admin/Local)** and dismissible for this LIVE product | **Dismiss** with `false positive` or `won't fix` + short note citing triage |
+| **Fixed** and the fix **was included** in this LIVE publish | **Dismiss** or note pending re-scan; say “security patch” only — no exploit detail |
+| **Deferred / backlog / nothing decided** | **Leave alone** |
+| No matching triage row | **Leave alone** |
+| Channel mismatch (e.g. Cloud-only finding on Local-only publish) | **Leave alone** |
+
+## Hard rules
+
+- If **nothing was done** in Admin triage for that issue → **do not** dismiss or comment.
+- Do **not** invent dismissals; use the triage file or user-confirmed diagnosis.
+- Do **not** put exploit steps into GitHub comments.
+- Do **not** dismiss Cloud-shaped deferred items as false positives solely because Admin deferred them.
+- After publish: list open alerts with `gh`, dismiss only matched rows, summarize dismissed vs left alone.
+
+## When this does not apply
+
+- No LIVE publish in this turn
+- Code Scanning unavailable (403/404) — report and stop
+- User explicitly skips alert sync for this promote

@@ -4,7 +4,7 @@ Curated advisory database for Project Intelligence security audits.
 **Defensive only** — CVE/GHSA/OSV ids, impact class, and mitigation/upgrade guidance.
 Never store exploit PoCs, payloads, or attack reproduction steps.
 
-- **Last refreshed:** 2026-09-05T19:19:53.364Z
+- **Last refreshed:** 2026-09-06T00:41:52.573Z
 - **Source:** OSV (api.osv.dev) + local lockfile `package-lock.json`
 - **Packages queried:** 80
 - **Advisories matched:** 0
