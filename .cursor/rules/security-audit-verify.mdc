@@ -1,0 +1,19 @@
+---
+description: Verify audit/CodeQL findings before treating them as real or changing code
+alwaysApply: true
+---
+
+# Security finding verification (anti–false-positive)
+
+When a **security audit**, **CodeQL** scan, **Security Review**, **threat-intel** match, or **server-secured** gate reports a problem or concern:
+
+1. **Do not** jump straight to code changes or treat the raw tool severity as proven.
+2. **Run verification** for that finding (repeat as needed until the issue is understood):
+   - Re-read the cited file/path and trust boundary (Admin/Local loopback vs Cloud public).
+   - Check existing triage (`docs/security-codeql-triage.md` when present) and prior Accept/FP/Deferred notes.
+   - Re-run the relevant check when useful (`npm run security:codeql`, `npm run security:server -- --profile …`, targeted review of the same rule/path).
+   - Confirm exploitability in *this* product’s threat model — or document why it is a false positive / Accept / Deferred.
+3. Only after verification: **fix** real issues (report as **Security patch** only), or record **Accept / FP / Deferred** in triage — never “fix” a confirmed false positive.
+4. Follow the **security-audit** skill verification step; stay ethical (no exploit PoCs).
+
+This complements LIVE code-scanning sync (`live-code-scanning-triage.mdc`): diagnose in Admin first, then dismiss or leave LIVE alerts accordingly.
