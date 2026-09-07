@@ -18,8 +18,9 @@ Whenever the user asks to **commit** and/or **push** to GitHub on those repos, t
 3. Commit (include the version bump).
 4. Push to GitHub.
 5. Publish installer: `npm run release` (GitHub Release tag `v{version}` + Setup exe + `latest.yml`).
+6. Confirm **`npm run version:verify:github` PASS** (also runs at end of `release` when wired).
 
-Steps 3–5 are not optional for Admin or LIVE Local. If push succeeds but release fails, fix and complete the installer before calling the task done.
+Steps 3–6 are not optional for Admin or LIVE Local. If push succeeds but release/verify fails, fix and complete before calling the task done.
 
 ## Versioning still applies
 

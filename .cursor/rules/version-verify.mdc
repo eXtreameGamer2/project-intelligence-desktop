@@ -1,0 +1,44 @@
+---
+description: Verify Admin/Local version counts and release feed consistency before calling a ship done
+alwaysApply: true
+---
+
+# Version count verification
+
+For **Project Intelligence ADMIN** and **LIVE Local** (`project-intelligence-desktop`):
+
+Whenever you bump a version, publish an installer, or finish a GitHub ship, **verify version counts** before saying the task is done.
+
+## Required checks
+
+Run:
+
+```bash
+npm run version:verify
+# After publish / when confirming a GitHub release:
+npm run version:verify:github
+```
+
+Confirm these match the same **app** version (dotted silent form, e.g. `1.0.32.3`):
+
+- `package.json` / `package-lock.json`
+- `electron/buildMeta.json` (after stamp)
+- Git tag `v{app}`
+- Setup asset name (`Project-Intelligence-*-Setup-{app}.exe`)
+- `latest.yml` **feed** version uses electron-updater semver (`1.0.32-s3`), not dotted silent
+
+Also confirm a silent bump only advances `.N` by one from the previous release on the same base (or base → `.1`).
+
+## Ship sequence
+
+After `npm run release`, `version:verify:github` must **PASS** (wired into `release` when present). If it fails, fix and re-verify — do not ignore.
+
+## LIVE Cloud
+
+No desktop installer version scheme — this gate is **N/A** for Cloud-only commits.
+
+## Do not
+
+- Treat dotted `1.0.32.3` and feed `1.0.32-s3` as different app versions (they are the same build)
+- Call a ship done when `version:verify` / `version:verify:github` fails
+- Skip verify because the bump “looked right”
